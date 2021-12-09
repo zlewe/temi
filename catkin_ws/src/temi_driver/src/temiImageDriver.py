@@ -1,6 +1,11 @@
+#!/usr/bin/env python3
+
 import paho.mqtt.client as mqtt
 import cv2
 import numpy as np
+import rospy
+from sensor_msgs.msg import Image
+from cv_bridge import CvBridge, CvBridgeError
 
 # The callback for when the client receives a CONNACK response from the server.
 def on_connect(client, userdata, flags, rc):
@@ -17,18 +22,35 @@ def on_message(client, userdata, msg):
     
     image = cv2.imdecode(image, cv2.IMREAD_COLOR)
     image = cv2.flip(image, -1)
-    cv2.imshow('image',image)
-    cv2.waitKey(1)
 
-client = mqtt.Client(client_id="image_node")
-client.on_connect = on_connect
-client.on_message = on_message
+    try:
+        image_pub.publish(bridge.cv2_to_imgmsg(image, "bgr8"))
+    except CvBridgeError as e:
+        print(e)
+    # cv2.imshow('image',image)
+    # cv2.waitKey(1)
 
-client.connect("192.168.50.64", 1883, 60)
+def main():
+    global image_pub
+    global bridge
 
-# Blocking call that processes network traffic, dispatches callbacks and
-# handles reconnecting.
-# Other loop*() functions are available that give a threaded interface and a
-# manual interface.
-client.loop_forever()
+    rospy.init_node('image_converter', anonymous=True)
+
+    image_pub = rospy.Publisher("camera",Image, queue_size = 10)
+    bridge = CvBridge()
+
+    client = mqtt.Client(client_id="image_node")
+    client.on_connect = on_connect
+    client.on_message = on_message
+
+    client.connect("192.168.50.64", 1883, 60)
+
+    # Blocking call that processes network traffic, dispatches callbacks and
+    # handles reconnecting.
+    # Other loop*() functions are available that give a threaded interface and a
+    # manual interface.
+    client.loop_forever()
+
+if __name__ == "__main__":
+    main()
 
