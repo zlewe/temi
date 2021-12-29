@@ -10,8 +10,8 @@ import matplotlib.pyplot as plt
 import numpy as np
 from std_msgs.msg import String, Header
 from geometry_msgs.msg import PoseStamped, Pose, Twist, Point, Quaternion
-from nav_msgs.msg import OccupancyGrid
-from tf.transformations import quaternion_from_euler
+from nav_msgs.msg import OccupancyGrid, MapMetaData
+from tf.transformations import euler_from_quaternion, quaternion_from_euler
 
 # The callback for when the client receives a CONNACK response from the server.
 def on_connect(client, userdata, flags, rc):
@@ -45,43 +45,43 @@ def on_message(client, userdata, msg):
 
     elif msg.topic == 'map':
         json_string = msg.payload.decode('utf-8')
-        # print(json_string)
-        json_dict = json.loads(json_string)
-        out_file = open("map.json", "w")
-        json.dump(json_dict, out_file)
-        out_file.close()
-        print(json_dict.keys())
-        row = json_dict['rows']
-        col = json_dict['cols']
-        data = json_dict['data']
+        map = json.loads(json_string)
+        # out_file = open("map.json", "w")
+        # json.dump(json_dict, out_file)
+        # out_file.close()
+        # print(json_dict.keys())
 
-        a = np.array(data)
-        nslices = json_dict['rows']
-        b = a.reshape((nslices, -1))
+        og = OccupancyGrid()
+        og.header.frame_id = 'map'
+        og.header.stamp = rospy.Time.now()
+        og.data = map['Map_Image']['data']
 
-        c = plt.imshow(np.flip(b, -1), cmap='gist_yarg')
-        plt.colorbar(c)
-        plt.show()
+        mtdt = MapMetaData()
+        mtdt.map_load_time = rospy.Time.now()
+        mtdt.resolution = map['mapInfo']['resolution']
+        mtdt.width = map['Map_Image']['cols']
+        print(mtdt.width)
+        mtdt.height = map['Map_Image']['rows']
+        print(mtdt.height)
+        origin = Pose()
+        origin.position.x = float(map['mapInfo']['origin_x'])
+        origin.position.y = float(map['mapInfo']['origin_y'])
+        origin.orientation.x = 0
+        origin.orientation.y = 0
+        origin.orientation.z = 0
+        origin.orientation.w = 1
+        mtdt.origin = origin
+        og.info = mtdt
 
-        # metadata = json_dict['meta']
-        # map = json_dict['map']
+        pubmap.publish(og)
 
-        # row = json_dict['rows']
-        # col - json_dict['cols']
-        # data = json_dict['data']
-
-        # origin = Pose()
-
-        # occ_map = OccupancyGrid()
-        # occ_map.data = data
-
-        # occ_map.header.frame_id = map
-        # occ_map.header.stamp = rospy.Time.now()
-        
-        # occ_map.info.resolution
-        # occ_map.info.width = col
-        # occ_map.info.height = row
-        # occ_map.info.origin
+def goal_cb(msg):
+    goal = msg.pose
+    x = goal.position.x
+    y = goal.position.y
+    (roll, pitch, yaw) = euler_from_quaternion([goal.orientation.x,goal.orientation.y,goal.orientation.z,goal.orientation.w])
+    mclient.publish("cmd", "goToPosition,"+str(x)+","+str(y)+","+str(yaw))
+    #print(x,y,yaw)
 
 def move_cb(data):
     r = rospy.Rate(10)
@@ -97,6 +97,7 @@ def move_cb(data):
 def main():
     global mclient
     global pubpose
+    global pubmap
 
     mclient = mqtt.Client(client_id="cmd_node")
     mclient.on_connect = on_connect
@@ -105,6 +106,8 @@ def main():
 
     rospy.Subscriber('cmd_vel', Twist, move_cb, queue_size=1)
     pubpose = rospy.Publisher('pose', PoseStamped, queue_size=5)
+    pubmap = rospy.Publisher('temi_map', OccupancyGrid, latch=True, queue_size=1)
+    rospy.Subscriber('move_base_simple/goal', PoseStamped,  goal_cb)
     rospy.init_node('temi_driver', anonymous=False)
     rospy.loginfo("Start temi driver")
     mclient.loop_start()
