@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python
 
 import paho.mqtt.client as mqtt
 import cv2
@@ -22,7 +22,6 @@ def on_message(client, userdata, msg):
     
     image = cv2.imdecode(image, cv2.IMREAD_COLOR)
     image = cv2.flip(image, -1)
-
     try:
         image_pub.publish(bridge.cv2_to_imgmsg(image, "bgr8"))
     except CvBridgeError as e:
@@ -33,17 +32,18 @@ def on_message(client, userdata, msg):
 def main():
     global image_pub
     global bridge
+    global on_message, on_connect
 
     rospy.init_node('image_converter', anonymous=True)
 
-    image_pub = rospy.Publisher("camera",Image, queue_size = 10)
+    image_pub = rospy.Publisher("/camera/raw",Image, queue_size = 10)
     bridge = CvBridge()
 
     client = mqtt.Client(client_id="image_node")
     client.on_connect = on_connect
     client.on_message = on_message
 
-    client.connect("192.168.50.64", 1883, 60)
+    client.connect("192.168.50.197", 1883, 60)
 
     # Blocking call that processes network traffic, dispatches callbacks and
     # handles reconnecting.
