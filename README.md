@@ -15,3 +15,9 @@ This repo implement a ROS interface to interact with robotemi's Android SDK.
 ## Dependencies
 * Docker (for running MQTT broker)
 
+## Installation
+* cd ~
+* git clone --recurse-submodules https://github.com/zlewe/temi.git
+* sudo apt install docker.io
+* pip3 install paho-mqtt
+

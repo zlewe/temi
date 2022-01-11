@@ -1,0 +1,6 @@
+<launch>
+  <node name="temiDriver" pkg="temi_driver" type="temiDriver.py" />
+  <node name="temiImageDriver" pkg="temi_driver" type="temiImageDriver.py" />
+  <node name="temiMap" pkg="temi_driver" type="temiMap.py" />
+  <node name="temiTf" pkg="temi_driver" type="tfPub.py" />
+</launch>

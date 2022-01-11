@@ -1,5 +1,6 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python
 
+from logging import exception
 import paho.mqtt.client as mqtt
 import cv2
 import rospy
@@ -8,10 +9,18 @@ import json
 import pickle as pkl
 import matplotlib.pyplot as plt
 import numpy as np
+
+# tf
+import tf2_ros
+import tf2_geometry_msgs
+
+# functions
+from tf.transformations import euler_from_quaternion, quaternion_from_euler
+
+# msg
 from std_msgs.msg import String, Header
 from geometry_msgs.msg import PoseStamped, Pose, Twist, Point, Quaternion
 from nav_msgs.msg import OccupancyGrid, MapMetaData
-from tf.transformations import euler_from_quaternion, quaternion_from_euler
 
 # The callback for when the client receives a CONNACK response from the server.
 def on_connect(client, userdata, flags, rc):
@@ -19,14 +28,14 @@ def on_connect(client, userdata, flags, rc):
 
     # Subscribing in on_connect() means that if we lose the connection and
     # reconnect then subscriptions will be renewed.
-    client.subscribe("position")
+    # client.subscribe("position")
     client.subscribe("map")
 
 # The callback for when a PUBLISH message is received from the server.
 def on_message(client, userdata, msg):
     rospy.loginfo(msg.topic)
 
-    if msg.topic == 'position':
+    '''if msg.topic == 'position':
         # rospy.loginfo(pos)
         pos = msg.payload.decode('utf-8').split(',')
         orientation = quaternion_from_euler(0, 0, float(pos[2]))
@@ -43,7 +52,8 @@ def on_message(client, userdata, msg):
 
         pubpose.publish(pose)
 
-    elif msg.topic == 'map':
+    el'''
+    if msg.topic == 'map':
         json_string = msg.payload.decode('utf-8')
         map = json.loads(json_string)
         # out_file = open("map.json", "w")
@@ -76,11 +86,22 @@ def on_message(client, userdata, msg):
         pubmap.publish(og)
 
 def goal_cb(msg):
-    goal = msg.pose
-    x = goal.position.x
-    y = goal.position.y
-    (roll, pitch, yaw) = euler_from_quaternion([goal.orientation.x,goal.orientation.y,goal.orientation.z,goal.orientation.w])
-    mclient.publish("cmd", "goToPosition,"+str(x)+","+str(y)+","+str(yaw))
+
+    try:
+        # Add frame transformation to get the correct position in the map frame
+        transform = tfbuf.lookup_transform('map', msg.header.frame_id, rospy.Time.now(), rospy.Duration(4.0))
+        goal_map = tf2_geometry_msgs.do_transform_pose(msg, transform)
+
+        if transform is None or goal_map is None:
+            exception('Transformation failed!')
+
+        goal = goal_map.pose
+        x = goal.position.x
+        y = goal.position.y
+        (roll, pitch, yaw) = euler_from_quaternion([goal.orientation.x,goal.orientation.y,goal.orientation.z,goal.orientation.w])
+        mclient.publish("cmd", "goToPosition,"+str(x)+","+str(y)+","+str(yaw))
+    except:
+        rospy.logwarn('Not transformation between map and {0} was found!'.format(msg.header.frame_id))
     #print(x,y,yaw)
 
 def move_cb(data):
@@ -98,11 +119,12 @@ def main():
     global mclient
     global pubpose
     global pubmap
+    global tfbuf
 
     mclient = mqtt.Client(client_id="cmd_node")
     mclient.on_connect = on_connect
     mclient.on_message = on_message
-    mclient.connect("192.168.50.64", 1883, 60)
+    mclient.connect("192.168.50.197", 1883, 60)
 
     rospy.Subscriber('cmd_vel', Twist, move_cb, queue_size=1)
     pubpose = rospy.Publisher('pose', PoseStamped, queue_size=5)
@@ -110,6 +132,12 @@ def main():
     rospy.Subscriber('move_base_simple/goal', PoseStamped,  goal_cb)
     rospy.init_node('temi_driver', anonymous=False)
     rospy.loginfo("Start temi driver")
+
+    # tf initialization
+    tfbuf = tf2_ros.Buffer(rospy.Duration(2.0))
+    tflistener = tf2_ros.TransformListener(tfbuf)
+
+    mclient.publish("cmd", "tiltAngle,"+str(0))
     mclient.loop_start()
     rospy.spin()
 
