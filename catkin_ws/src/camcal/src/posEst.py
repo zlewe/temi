@@ -7,7 +7,7 @@ import numpy as np
 import cv2
 import rospy
 from ros_openpose.msg import Frame
-from skeleton.msg import Player
+from skeleton.msg import Player, Players
 from cv_bridge import CvBridge
 from geometry_msgs.msg import Pose, PoseArray
 
@@ -52,12 +52,14 @@ def imgcallback(msg):
 
 def mycallback(msg):
     global camera
+    playerpub.publish(msg)
 
     poses = PoseArray()
     poses.header.stamp = rospy.Time.now()
     poses.header.frame_id = 'temi'
 
-    for skeleton in msg.persons:
+    for player in msg.players:
+        skeleton = player.posture.skeleton
         feet = skeleton.bodyParts[11]
         if skeleton.bodyParts[11].pixel.y < skeleton.bodyParts[14].pixel.y:
             feet = skeleton.bodyParts[14].pixel
@@ -74,23 +76,18 @@ def mycallback(msg):
 
         poses.poses.append(new_pose)
 
-        player = Player()
         player.position = new_pose
-        player.posture.skeleton = skeleton
-
-        playerpub.publish(player)
+        print(player.id)
         
-
     pospub.publish(poses)
-    
     
 def main():
     global image_pub, pospub, playerpub
 
     rospy.init_node('skeleton_tester', anonymous=False)
-    rospy.Subscriber("/frame", Frame, callback=mycallback, queue_size = 10)
+    rospy.Subscriber('/players/withid', Players, callback=mycallback, queue_size = 10)
     pospub = rospy.Publisher('/players', PoseArray, queue_size=10)
-    playerpub = rospy.Publisher('/allplayers', Player, queue_size=10)
+    playerpub = rospy.Publisher('/players/withpos', Players, queue_size=1)
     rospy.spin()
 
 if __name__ == '__main__':

@@ -12,7 +12,7 @@ import tf2_geometry_msgs
 # msg
 from sensor_msgs.msg import Image
 from ros_openpose.msg import Frame
-from skeleton.msg import Player
+from skeleton.msg import Players
 from geometry_msgs.msg import Pose,PoseArray,PoseStamped
 
 # cvbridge
@@ -32,35 +32,38 @@ id = 0
 moving = False
 goal = None
 
-def compare(msg):
+def compare(players):
     global id, poses, goalpub,goal,moving
 
     if moving:
         return
 
     image = bridge.imgmsg_to_cv2(poses[id][1])
-    mypose = ss.toNumpyArray(msg.posture.skeleton.bodyParts)
-    target = ss.toNumpyArray(poses[id][2].bodyParts)
 
-    mja = ss.jointAngles(mypose)
-    tja = ss.jointAngles(target)
-    score, mins, count = ss.similarity(mja, tja) 
-    new_score = (score+mins)/2.0*count/16.0
-    cv2.imshow('Target pose', image)
-    cv2.waitKey(1)
-    print('Pose score: %.0f'%(new_score*100.0))
 
-    if new_score>0.85:
-        id+=1
-        goal = PoseStamped()
-        goal.header.frame_id='map'
-        goal.header.stamp = rospy.Time.now()
-        goal.pose = msg.position
-        transform = tfbuf.lookup_transform('map', 'temi', rospy.Time.now(), rospy.Duration(4.0))
-        goal = tf2_geometry_msgs.do_transform_pose(goal, transform)
+    for msg in players.players:
+        mypose = ss.toNumpyArray(msg.posture.skeleton.bodyParts)
+        target = ss.toNumpyArray(poses[id][2].bodyParts)
 
-        moving = True
-        goalpub.publish(goal)
+        mja = ss.jointAngles(mypose)
+        tja = ss.jointAngles(target)
+        score, mins, count = ss.similarity(mja, tja) 
+        new_score = (score+mins)/2.0*count/16.0
+        cv2.imshow('Target pose', image)
+        cv2.waitKey(1)
+        print('Pose score: %.0f'%(new_score*100.0))
+
+        if new_score>0.85:
+            id+=1
+            goal = PoseStamped()
+            goal.header.frame_id='map'
+            goal.header.stamp = rospy.Time.now()
+            goal.pose = msg.position
+            transform = tfbuf.lookup_transform('map', 'temi', rospy.Time.now(), rospy.Duration(4.0))
+            goal = tf2_geometry_msgs.do_transform_pose(goal, transform)
+
+            moving = True
+            goalpub.publish(goal)
         
 
 def pose_cb(msg):
@@ -101,7 +104,7 @@ def main():
     tfbuf = tf2_ros.Buffer(rospy.Duration(2.0))
     tflistener = tf2_ros.TransformListener(tfbuf)
 
-    rospy.Subscriber('/allplayers', Player, callback=compare, queue_size=10)
+    rospy.Subscriber('/allplayers', Players, callback=compare, queue_size=10)
     rospy.Subscriber('/pose', PoseStamped, callback=pose_cb, queue_size=10)
     rospy.Subscriber('/move_base_simple/goal', PoseStamped, callback=goal_cb, queue_size=10)
     goalpub = rospy.Publisher('move_base_simple/goal', PoseStamped, queue_size=10)

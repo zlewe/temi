@@ -54,6 +54,7 @@ add_message_files(
   FILES
   Posture.msg
   Player.msg
+  Players.msg
 )
 
 ## Generate services in the 'srv' folder

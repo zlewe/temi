@@ -21,6 +21,7 @@ from tf.transformations import euler_from_quaternion, quaternion_from_euler
 from std_msgs.msg import String, Header
 from geometry_msgs.msg import PoseStamped, Pose, Twist, Point, Quaternion
 from nav_msgs.msg import OccupancyGrid, MapMetaData
+from temi_driver.msg import TemiCMD
 
 # The callback for when the client receives a CONNACK response from the server.
 def on_connect(client, userdata, flags, rc):
@@ -115,6 +116,12 @@ def move_cb(data):
     mclient.publish("cmd", "skidJoy,"+str(x)+","+str(y))
     r.sleep()
 
+def cmd_cb(cmd):
+    print(cmd)
+    r = rospy.Rate(10)
+    mclient.publish(cmd.type, cmd.arg)
+    r.sleep()
+    
 def main():
     global mclient
     global pubpose
@@ -128,11 +135,13 @@ def main():
     mserver_port = rospy.get_param("/mqtt_port", 1883)
     mclient.connect(mserver_ip, mserver_port, 60)
 
+    rospy.init_node('temi_driver', anonymous=False)
     rospy.Subscriber('cmd_vel', Twist, move_cb, queue_size=1)
+    print("Yes........................")
+    rospy.Subscriber('temi_cmd', TemiCMD, cmd_cb, queue_size=10)
     pubpose = rospy.Publisher('pose', PoseStamped, queue_size=5)
     pubmap = rospy.Publisher('temi_map', OccupancyGrid, latch=True, queue_size=1)
     rospy.Subscriber('move_base_simple/goal', PoseStamped,  goal_cb)
-    rospy.init_node('temi_driver', anonymous=False)
     rospy.loginfo("Start temi driver")
 
     # tf initialization
