@@ -128,6 +128,7 @@ def main():
     global pubmap
     global tfbuf
 
+
     mclient = mqtt.Client(client_id="cmd_node")
     mclient.on_connect = on_connect
     mclient.on_message = on_message
