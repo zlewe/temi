@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 
 import paho.mqtt.client as mqtt
 import cv2
@@ -43,7 +43,10 @@ def main():
     client.on_connect = on_connect
     client.on_message = on_message
 
-    client.connect("192.168.50.197", 1883, 60)
+    mserver_ip = rospy.get_param('/mqtt_ip', "192.168.50.197")
+    print(mserver_ip)
+    mserver_port = rospy.get_param('/mqtt_port', 1883)
+    client.connect(mserver_ip, mserver_port, 60)
 
     # Blocking call that processes network traffic, dispatches callbacks and
     # handles reconnecting.

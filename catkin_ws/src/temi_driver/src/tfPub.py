@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 
 import paho.mqtt.client as mqtt
 import cv2
@@ -64,7 +64,9 @@ def main():
     mclient = mqtt.Client(client_id="tf_node")
     mclient.on_connect = on_connect
     mclient.on_message = on_message
-    mclient.connect("192.168.50.197", 1883, 60)
+    mserver_ip = rospy.get_param('/mqtt_ip', "192.168.50.197")
+    mserver_port = rospy.get_param('/mqtt_port', 1883)
+    mclient.connect(mserver_ip, mserver_port, 60)
 
     br = tf.TransformBroadcaster()
 
