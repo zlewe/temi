@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python
 
 from logging import exception
 import paho.mqtt.client as mqtt
