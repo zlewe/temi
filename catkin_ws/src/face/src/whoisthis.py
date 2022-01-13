@@ -98,27 +98,26 @@ def frame_cb(msg):
             minSize=(int(minW), int(minH)),
         )
         id = -1
+        confidence = 0.0
         myname = "nope"
+
         for (x, y, w, h) in faces:
             cv2.rectangle(img, (x, y), (x + w, y + h), (0, 255, 0), 2)
-            id, confidence = recognizer.predict(gray[y:y + h, x:x + w])
-            if (confidence < 100):
+            new_id, conf = recognizer.predict(gray[y:y + h, x:x + w])
+            if conf < 100 and conf>confidence:
+                id = new_id
                 myname = names[id]
-                confidence = "  {0}%".format(round(100 - confidence))
-            else:
-                # Unknown Face
-                id=-1
-                myname = "Who are you ?"
-                confidence = "  {0}%".format(round(100 - confidence))
+                confidence = conf
 
+        if id >= 0:
             cv2.putText(img, myname, (x + 5, y - 5), font, 1, (255, 255, 255), 2)
-            cv2.putText(img, str(confidence), (x + 5, y + h - 5), font, 1, (255, 255, 0), 1)
-        if not myname == 'nope':
+            cv2.putText(img, "  {0}%".format(round(100 - confidence)), (x + 5, y + h - 5), font, 1, (255, 255, 0), 1)
             cv2.imshow('{0}'.format(myname),img)
             cv2.waitKey(1)
 
         player = Player()
         player.id = id
+        player.id_score = confidence
         player.posture.skeleton = skeleton
         players.players.append(player)
 

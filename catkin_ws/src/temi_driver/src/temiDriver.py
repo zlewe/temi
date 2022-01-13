@@ -138,7 +138,6 @@ def main():
 
     rospy.init_node('temi_driver', anonymous=False)
     rospy.Subscriber('cmd_vel', Twist, move_cb, queue_size=1)
-    print("Yes........................")
     rospy.Subscriber('temi_cmd', TemiCMD, cmd_cb, queue_size=10)
     pubpose = rospy.Publisher('pose', PoseStamped, queue_size=5)
     pubmap = rospy.Publisher('temi_map', OccupancyGrid, latch=True, queue_size=1)

@@ -1,3 +1,4 @@
 catkin_ws/devel/*
 catkin_ws/build/*
 catkin_ws/src/face/src/images/*
+catkin_ws/src/skeleton/poses/raw/*
