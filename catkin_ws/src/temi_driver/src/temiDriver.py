@@ -31,6 +31,7 @@ def on_connect(client, userdata, flags, rc):
     # reconnect then subscriptions will be renewed.
     # client.subscribe("position")
     client.subscribe("map")
+    client.subscribe("status")
 
 # The callback for when a PUBLISH message is received from the server.
 def on_message(client, userdata, msg):
@@ -54,7 +55,14 @@ def on_message(client, userdata, msg):
         pubpose.publish(pose)
 
     el'''
-    if msg.topic == 'map':
+    if msg.topic == 'status':
+        status = msg.payload.decode('utf-8')
+        sm = String()
+        sm.data = status
+        pubstatus.publish(sm)
+        
+
+    elif msg.topic == 'map':
         json_string = msg.payload.decode('utf-8')
         map = json.loads(json_string)
         # out_file = open("map.json", "w")
@@ -126,6 +134,7 @@ def main():
     global mclient
     global pubpose
     global pubmap
+    global pubstatus
     global tfbuf
 
 
@@ -141,6 +150,7 @@ def main():
     rospy.Subscriber('temi_cmd', TemiCMD, cmd_cb, queue_size=10)
     pubpose = rospy.Publisher('pose', PoseStamped, queue_size=5)
     pubmap = rospy.Publisher('temi_map', OccupancyGrid, latch=True, queue_size=1)
+    pubstatus = rospy.Publisher('status', String, queue_size=5)
     rospy.Subscriber('move_base_simple/goal', PoseStamped,  goal_cb)
     rospy.loginfo("Start temi driver")
 
