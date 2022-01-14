@@ -19,6 +19,8 @@ from geometry_msgs.msg import Pose,PoseArray,PoseStamped
 from cv_bridge import CvBridge
 bridge = CvBridge()
 
+PlayerNum=3
+
 names = ['brain','ariel', 'jj'] # add a name into this list
 print("Re-directing the folder to poses...")
 dir_path = os.path.dirname(os.path.realpath(__file__)) + '/../poses'
@@ -41,22 +43,26 @@ def compare(players):
 
     image = bridge.imgmsg_to_cv2(poses[id][1])
 
-    for msg in players.players:
-        mypose = ss.toNumpyArray(msg.posture.skeleton.bodyParts)
+    for player in players.players:
+        mypose = ss.toNumpyArray(player.posture.skeleton.bodyParts)
         target = ss.toNumpyArray(poses[id][2].bodyParts)
 
         mja = ss.jointAngles(mypose)
         tja = ss.jointAngles(target)
         score, mins, count = ss.similarity(mja, tja) 
         new_score = (score+mins)/2.0*count/16.0
-        msg.score = new_score
+        player.score = new_score
+
+        if player.id >-1 and player.id<PlayerNum:
+            print('Player %d with score %f at (%f, %f).'%(player.id, player.score, player.position.position.x, player.position.position.y))
+
 
     playerpub.publish(players)
     
 def main():
     global id, goalpub, tfbuf, playerpub
 
-    rospy.init_node('findSkeleton', anonymous=False)
+    rospy.init_node('PostureCheck', anonymous=False)
 
     rospy.Subscriber('/players/withpos', Players, callback=compare, queue_size = 10)
     playerpub = rospy.Publisher('players/withscore', Players, queue_size=10)

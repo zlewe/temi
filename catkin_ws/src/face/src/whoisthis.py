@@ -12,6 +12,7 @@ from ros_openpose.msg import Frame
 from skeleton.msg import Player, Players
 bridge = CvBridge()
 
+PlayerNum=3
 
 dir_path = os.path.dirname(os.path.realpath(__file__))
 
@@ -79,9 +80,8 @@ def frame_cb(msg):
 
         try:
             gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-
         except:
-            print(img)
+            pass
 
         faces = faceCascade.detectMultiScale(
             gray,
@@ -113,6 +113,10 @@ def frame_cb(msg):
         player.posture.skeleton = skeleton
         players.players.append(player)
 
+        if player.id >-1 and player.id<PlayerNum:
+            print('Player %d with score %f at (%f, %f).'%(player.id, player.score, player.position.position.x, player.position.position.y))
+
+
     playerpub.publish(players)
 
 
@@ -120,7 +124,7 @@ def main():
     global image_pub, img, playerpub, target_image
 
     target_image = None
-    rospy.init_node('face_recognition', anonymous=False)
+    rospy.init_node('FaceRecognition', anonymous=False)
 
     initFaceRec()
 

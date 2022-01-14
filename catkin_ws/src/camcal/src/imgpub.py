@@ -22,17 +22,20 @@ def command_cb(msg):
     elif msg=='STOP_OPENPOSE':
         publishing=False
 
-
+pub_count=3
 def imagecallback(msg):
-    global publishing
+    global publishing, pub_count
 
-    if publishing:
+    pub_count -=1
+    if publishing and pub_count<=0:
         image_pub.publish(msg)
+        pub_count=3
+        
     
 def main():
     global image_pub
 
-    rospy.init_node('undistort', anonymous=False)
+    rospy.init_node('ImagePort', anonymous=False)
     rospy.Subscriber('/game', String,  callback=command_cb, queue_size=10)
     rospy.Subscriber('/camera/raw', Image, imagecallback, queue_size=1)
     image_pub = rospy.Publisher("/camera/port",Image, queue_size = 1)

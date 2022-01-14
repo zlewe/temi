@@ -13,6 +13,8 @@ from geometry_msgs.msg import Pose, PoseArray
 
 bridge = CvBridge()
 
+PlayerNum=3
+
 # Main loop receiving images from temi to calibrate
 cammat = None
 print('Load calibration matrices from cam.pickle...')
@@ -52,7 +54,6 @@ def imgcallback(msg):
 
 def mycallback(msg):
     global camera
-    playerpub.publish(msg)
 
     poses = PoseArray()
     poses.header.stamp = rospy.Time.now()
@@ -77,14 +78,18 @@ def mycallback(msg):
         poses.poses.append(new_pose)
 
         player.position = new_pose
-        print(player.id)
+        
+        if player.id >-1 and player.id<PlayerNum:
+            print('Player %d with score %f at (%f, %f).'%(player.id, player.score, player.position.position.x, player.position.position.y))
+
         
     pospub.publish(poses)
+    playerpub.publish(msg)
     
 def main():
     global image_pub, pospub, playerpub
 
-    rospy.init_node('skeleton_tester', anonymous=False)
+    rospy.init_node('PositionEstimator', anonymous=False)
     rospy.Subscriber('/players/withid', Players, callback=mycallback, queue_size = 10)
     pospub = rospy.Publisher('/players', PoseArray, queue_size=10)
     playerpub = rospy.Publisher('/players/withpos', Players, queue_size=1)

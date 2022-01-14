@@ -25,6 +25,7 @@ players=Players()
 target_player=None
 recoreded=np.zeros(PlayerNum, dtype=float)
 
+# initialize the face recognition module
 def initFaceRec():
     global recognizer, faceCascade, font
     recognizer = cv2.face.LBPHFaceRecognizer_create()
@@ -35,6 +36,7 @@ def initFaceRec():
 
     font = cv2.FONT_HERSHEY_SIMPLEX
 
+# callback function for image
 def image_cb(msg):
     global target_image, recognizer, recoreded, alive
     target_image = bridge.imgmsg_to_cv2(msg)
@@ -60,11 +62,13 @@ def image_cb(msg):
     if id>-1:
         recoreded[id] += confidence
 
-
+# receive precessed player data
 def player_cb(msg):
     global players
     players = msg
 
+# !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+# checkout stage
 def GoToCheckout(player):
     global detect_status, target_player
 
@@ -78,6 +82,7 @@ def GoToCheckout(player):
         detect_status = "MOVING"
         target_player = player
 
+# receiving temi status
 def status_cb(msg):
     global temi_status, detect_status
 
@@ -104,12 +109,11 @@ def status_cb(msg):
         elif temi_status=='MOVING':
             detect_status = 'STOP'
 
-
 def main():
     global image_pub, img, playerpub, target_image, goal_pub, players, detect_status
 
     target_image = None
-    rospy.init_node('face_recognition', anonymous=False)
+    rospy.init_node('FaceCheckout', anonymous=False)
 
     initFaceRec()
 

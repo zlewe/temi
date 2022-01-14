@@ -20,22 +20,19 @@ PlayerNum = 3
 alive = [1,1,1]
 player_stack = Players()
 
+def visualizationOnFakeMap(x,y,radius,color,thicc):
+    global fakemap
+    fakemap = cv2.circle(fakemap, (int(y*100+fakemap.shape[1]/2), int(x*100)), radius, color=color, thickness = thicc)
+
 def player_cb(msg):
     global fakemap, PlayerNum
     for player in msg.players:
         player_stack.players.append(player)
 
-        if player.id==0:
-            color = (255,0,0)
-        elif player.id==1:
-            color = (0,255,0)
-        elif player.id==2:
-            color = (0,0,255)
-        else:
-            color = (255,255,255)
+        visualizationOnFakeMap(player.position.position.x, player.position.position.y, 3, getColor(player.id), 1)
 
-        fakemap = cv2.circle(fakemap, (int(player.position.position.x), int(player.position.position.y)), 2, color=color, thickness = 1)
-
+        if player.id >-1 and player.id<PlayerNum:
+            print('Player %d with score %f at (%f, %f).'%(player.id, player.score, player.position.position.x, player.position.position.y))
 
     cv2.imshow('Mymap',fakemap)
     cv2.waitKey(1)
@@ -61,7 +58,6 @@ def ClusterPlayers():
         pos.append((player.position.position.x, player.position.position.y))
 
     cluster = KMeans(n_clusters=PlayerNum, random_state=0).fit(pos)
-    #print(cluster.labels_)
     
     # build list for all cluster
     clustered_players = []
@@ -74,7 +70,8 @@ def ClusterPlayers():
 
         # for visualization only
         pos = player_stack.players[i].position.position
-        fakemap = cv2.circle(fakemap, (int(pos.x), int(pos.y)), 6, color=getColor(cluster.labels_[i]), thickness = 1)
+
+        visualizationOnFakeMap(pos.x, pos.y, 6, getColor(player.id), 1)
 
     for i in range(PlayerNum):
         print('Collect %d player %d'%(len(clustered_players[i]), i))
@@ -108,10 +105,9 @@ def ClusterPlayers():
 
     print('Totally %d'%(len(players.players)))
 
-    for p in players:
+    for p in players.players:
 
-        fakemap = cv2.circle(fakemap, (int(p.position.position.x), int(p.position.position.y)), 10, color=getColor(p.id), thickness = 3)
-
+        visualizationOnFakeMap(p.position.position.x, p.position.position.y, 10, getColor(p.id), 3)
     cv2.imshow('Mymap',fakemap)
     cv2.waitKey(1)
 
@@ -126,7 +122,7 @@ def command_cb(msg):
 def main():
     global id, goalpub,tfbuf, player_stack, targetid, fakemap, playerpub
 
-    rospy.init_node('PlayerDetection', anonymous=False)
+    rospy.init_node('HistoryDetection', anonymous=False)
 
     fakemap = np.zeros((600,600,3), dtype=np.uint8)
     cv2.imshow('Mymap', fakemap)
