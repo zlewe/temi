@@ -27,7 +27,7 @@ def initFaceRec():
     font = cv2.FONT_HERSHEY_SIMPLEX
 
 # names related to ids: The names associated to the ids: 1 for Mohamed, 2 for Jack, etc...
-names = ['brain','ariel', 'jj'] # add a name into this list
+names = ['brian','ariel', 'jj'] # add a name into this list
 
 def image_cb(msg):
     global target_image

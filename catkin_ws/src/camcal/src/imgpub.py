@@ -22,14 +22,14 @@ def command_cb(msg):
     elif msg=='STOP_OPENPOSE':
         publishing=False
 
-pub_count=3
+pub_count=0
 def imagecallback(msg):
     global publishing, pub_count
 
     pub_count -=1
     if publishing and pub_count<=0:
         image_pub.publish(msg)
-        pub_count=3
+        pub_count=0
         
     
 def main():

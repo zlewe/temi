@@ -24,15 +24,15 @@ def mouse(event, x, y, flag, parms):
         player = Player()
         player.id = targetid
         player.id_score = 0.2
-        player.position.position.x = x
-        player.position.position.y = y
+        player.position.position.y = (x-fakemap.shape[1]/2.0)/100.0
+        player.position.position.x = y/100.0
 
         player_stack.players.append(player)
         print('Add %d at (%d,%d) with %f score'%(targetid, x, y, player.id_score))
     return
 
 def main():
-    global id, goalpub,tfbuf, player_stack, targetid
+    global id, goalpub,tfbuf, player_stack, targetid, fakemap
 
     rospy.init_node('findSkeleton', anonymous=False)
 

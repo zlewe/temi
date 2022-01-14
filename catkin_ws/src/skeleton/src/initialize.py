@@ -32,7 +32,7 @@ def getSkeleton(msg):
 
     for skeleton in msg.persons:
 
-        data = (images[id][0], bridge.cv2_to_imgmsg(images[id][1]), skeleton)
+        data = (images[id][0], bridge.cv2_to_imgmsg(images[id][1], encoding='bgr8'), skeleton)
         poses.append(data)
         print('Append the skeleton of image {0}'.format(images[id][0]))
         # Save the first skeleton only, just in case
@@ -55,7 +55,7 @@ def main():
 
     rospy.init_node('findSkeleton', anonymous=False)
     rospy.Subscriber('/frame', Frame, callback=getSkeleton, queue_size=10)
-    imgpub = rospy.Publisher('/camera/raw', Image, queue_size=1)
+    imgpub = rospy.Publisher('/camera/port', Image, queue_size=1)
 
     # Wait for few secs to make the publishing successful!!
     rate = rospy.Rate(0.5)

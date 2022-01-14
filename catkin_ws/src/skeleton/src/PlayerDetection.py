@@ -2,7 +2,7 @@
 import numpy as np
 import cv2
 import rospy
-from sklearn.cluster import KMeans
+from sklearn.cluster import KMeans,DBSCAN
 
 # msg
 from std_msgs.msg import String
@@ -22,7 +22,8 @@ player_stack = Players()
 
 def visualizationOnFakeMap(x,y,radius,color,thicc):
     global fakemap
-    fakemap = cv2.circle(fakemap, (int(y*100+fakemap.shape[1]/2), int(x*100)), radius, color=color, thickness = thicc)
+    ratio = 100.0
+    fakemap = cv2.circle(fakemap, (int(y*ratio+fakemap.shape[1]/2), int(x*ratio)), radius, color=color, thickness = thicc)
 
 def player_cb(msg):
     global fakemap, PlayerNum
@@ -49,35 +50,52 @@ def getColor(id):
         color = (255,255,255)
     return color 
 
+
+# collect positions
+def CollectPsitions(players):
+    pos = []
+    for player in players.players:
+        pos.append((player.position.position.x, player.position.position.y))
+
+    return pos
+
+
 def ClusterPlayers():
     global PlayerNum, fakemap
 
-    # collect positions
-    pos = []
-    for player in player_stack.players:
-        pos.append((player.position.position.x, player.position.position.y))
+    pos = CollectPsitions(player_stack)
+    cluster = DBSCAN(eps=0.5, min_samples=5).fit(pos)
+    #cluster = KMeans(n_clusters=2, random_state=0).fit(pos)
 
-    cluster = KMeans(n_clusters=PlayerNum, random_state=0).fit(pos)
+    ClusterNum = -1
+    for i in cluster.labels_:
+        ClusterNum = max(ClusterNum, i+1)
     
     # build list for all cluster
     clustered_players = []
-    for i in range(PlayerNum):
+    for i in range(ClusterNum):
         clustered_players.append([])
 
     # assign all players to corresponding cluster list
     for i in range(len(cluster.labels_)):
+        if cluster.labels_[i]==-1:
+            continue
+
         clustered_players[cluster.labels_[i]].append(player_stack.players[i])
 
         # for visualization only
         pos = player_stack.players[i].position.position
 
-        visualizationOnFakeMap(pos.x, pos.y, 6, getColor(player.id), 1)
+        visualizationOnFakeMap(pos.x, pos.y, 6, getColor(cluster.labels_[i]), 1)
 
-    for i in range(PlayerNum):
+    for i in range(ClusterNum):
         print('Collect %d player %d'%(len(clustered_players[i]), i))
 
     players = Players()
     for collection in clustered_players:
+        if len(collection)==0:
+            continue
+
         vote = np.zeros(PlayerNum, dtype=float)
         player = Player()
         for temp in collection:
@@ -138,6 +156,8 @@ def main():
         key = cv2.waitKey(1)
         if key == 27:
             ClusterPlayers()
+            playerpub.publish(ClusterPlayers())
+            player_stack = Players()
         rate.sleep()
     
 if __name__ == '__main__':

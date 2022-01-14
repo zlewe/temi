@@ -18,20 +18,25 @@ bridge = CvBridge()
 
 game_status = GameStatus()
 PlayerNum=3
-names = ['brain','ariel', 'jj'] # add a name into this list
     
 def main():
-    global id, goalpub, tfbuf, playerpub
+    global id, goalpub, tfbuf, playerpub, game_status
 
     rospy.init_node('GameCore', anonymous=False)
 
     status_pub = rospy.Publisher('/game/status', GameStatus, queue_size=10)
     
     rate = rospy.Rate(10)
+
+    game_status.player_num = 3
+    game_status.status = 'READY'
+    game_status.last_status = 'READY'
+    game_status.names = ['Brian', 'Ariel', 'James']
+    game_status.alive = [1, 1, 1]
     
     while not rospy.is_shutdown():
 
-        status_pub.publish()
+        status_pub.publish(game_status)
         rate.sleep()
     rospy.spin()
 
