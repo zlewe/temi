@@ -25,16 +25,8 @@ def initFaceRec():
 
     font = cv2.FONT_HERSHEY_SIMPLEX
 
-id = 0
 # names related to ids: The names associated to the ids: 1 for Mohamed, 2 for Jack, etc...
 names = ['brain','ariel', 'jj'] # add a name into this list
-#Video Capture
-cam = cv2.VideoCapture(0)
-cam.set(3, 640)
-cam.set(4, 480)
-# Min Height and Width for the  window size to be recognized as a face
-minW = 0.1 * cam.get(3)
-minH = 0.1 * cam.get(4)
 
 def image_cb(msg):
     global target_image
@@ -95,8 +87,8 @@ def frame_cb(msg):
             gray,
             scaleFactor=1.2,
             minNeighbors=5,
-            minSize=(int(minW), int(minH)),
-        )
+            minSize=(int(gray.shape[1]*0.5), int(gray.shape[0]*0.5)),)
+
         id = -1
         confidence = 0.0
         myname = "nope"

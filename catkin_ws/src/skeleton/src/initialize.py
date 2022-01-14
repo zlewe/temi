@@ -55,7 +55,7 @@ def main():
 
     rospy.init_node('findSkeleton', anonymous=False)
     rospy.Subscriber('/frame', Frame, callback=getSkeleton, queue_size=10)
-    imgpub = rospy.Publisher('/camera/undistorted', Image, queue_size=1)
+    imgpub = rospy.Publisher('/camera/raw', Image, queue_size=1)
 
     # Wait for few secs to make the publishing successful!!
     rate = rospy.Rate(0.5)

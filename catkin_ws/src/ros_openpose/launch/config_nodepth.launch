@@ -7,7 +7,7 @@ Date: 2019/11/23
 -->
 <launch>
   <!-- rostopic to subscribe for color images -->
-  <arg name="color_topic" default="/camera/raw" />
+  <arg name="color_topic" default="/camera/port" />
 
   <!-- rostopic to subscribe for depth images.
   leave this field as it is because we do not have depth information. -->
