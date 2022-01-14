@@ -1,3 +1,5 @@
+string status
+string last_status
 int32 player_num
 int32[] alive
-String[] names
+string[] names
