@@ -138,7 +138,7 @@ def command_cb(msg):
         player_stack = Players()
 
 def main():
-    global id, goalpub,tfbuf, player_stack, targetid, fakemap, playerpub
+    global id, goalpub, tfbuf, player_stack, targetid, fakemap, playerpub
 
     rospy.init_node('HistoryDetection', anonymous=False)
 

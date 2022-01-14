@@ -9,7 +9,11 @@ import rospy
 from ros_openpose.msg import Frame
 from skeleton.msg import Player, Players
 from cv_bridge import CvBridge
-from geometry_msgs.msg import Pose, PoseArray
+from geometry_msgs.msg import Pose, PoseArray, PoseStamped
+
+# tf
+import tf2_ros
+import tf2_geometry_msgs
 
 bridge = CvBridge()
 
@@ -53,11 +57,17 @@ def imgcallback(msg):
     camera = bridge.imgmsg_to_cv2(msg)
 
 def mycallback(msg):
-    global camera
+    global camera, tfbuf
 
     poses = PoseArray()
+    stamp_pos = PoseStamped()
+    
     poses.header.stamp = rospy.Time.now()
     poses.header.frame_id = 'temi'
+    stamp_pos.header = poses.header
+
+    # Add frame transformation to get the correct position in the map frame
+    transform = tfbuf.lookup_transform('map', 'temi', rospy.Time.now(), rospy.Duration(4.0))
 
     for player in msg.players:
         skeleton = player.posture.skeleton
@@ -68,16 +78,18 @@ def mycallback(msg):
             feet = skeleton.bodyParts[11].pixel
 
         pos = toGround(feet.x, feet.y)
-        
-        new_pose = Pose()
 
+        new_pose = Pose()
         new_pose.position.x = pos[0]
         new_pose.position.y = pos[1]
         new_pose.position.z = 0.0
-
         poses.poses.append(new_pose)
 
-        player.position = new_pose
+        # Transform the player poses to map frame for later usage
+        stamp_pos.pose = new_pose
+        posonmap = tf2_geometry_msgs.do_transform_pose(stamp_pos, transform)
+
+        player.position = posonmap.pose
         
         if player.id >-1 and player.id<PlayerNum:
             print('Player %d with score %f at (%f, %f).'%(player.id, player.score, player.position.position.x, player.position.position.y))
@@ -87,12 +99,17 @@ def mycallback(msg):
     playerpub.publish(msg)
     
 def main():
-    global image_pub, pospub, playerpub
+    global image_pub, pospub, playerpub, transform, tfbuf
 
     rospy.init_node('PositionEstimator', anonymous=False)
     rospy.Subscriber('/players/withid', Players, callback=mycallback, queue_size = 10)
     pospub = rospy.Publisher('/players', PoseArray, queue_size=10)
     playerpub = rospy.Publisher('/players/withpos', Players, queue_size=1)
+
+    # tf initialization
+    tfbuf = tf2_ros.Buffer(rospy.Duration(2.0))
+    tflistener = tf2_ros.TransformListener(tfbuf)
+
     rospy.spin()
 
 if __name__ == '__main__':
