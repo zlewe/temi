@@ -7,7 +7,7 @@ import rospy
 from enum import Enum
 from game.msg import GameStatus
 from rospy.core import rospyinfo
-from temi_driver import TemiCMD
+from temi_driver.msg import TemiCMD
 from geometry_msgs.msg import Pose
 from tf.transformations import random_quaternion
 from std_msgs.msg import String
@@ -44,7 +44,6 @@ def game_cb(msg):
         if game_status.last_status == "REGISTER": 
             start_time = rospy.Time.now()
     
-
 def start_the_round():
     #go to start position
     pub_cmd.publish(TemiCMD("cmd","goToPosition,"+START_POSITION))
