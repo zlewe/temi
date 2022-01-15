@@ -12,7 +12,7 @@ from geometry_msgs.msg import Pose
 from tf.transformations import random_quaternion
 from std_msgs.msg import String
 
-START_POSITION = "1.26,-3.57,0"
+START_POSITION = rospy.get_param("/start_position","0.63, -3.6 ,0")
 
 game_status = GameStatus()
 game_status.status = "REGISTER"
@@ -85,7 +85,7 @@ def start_the_round():
     timelast = rospy.Time.now()
 
     #delay
-    DELAY = randint(3,8)
+    DELAY = randint(5,10)
     while ((rospy.Time.now() - timelast).to_sec() < DELAY):
         rate.sleep()
 
@@ -143,7 +143,13 @@ def main():
         
         elif game_status.status == "END_GAME":
                 #TODO:show winner
-                print('show_winner')
+                if game_status.alive == 0:
+                    print("game_over")
+                    rospy.sleep(5)
+                else:
+                    print('show_winner/s')
+                    rospy.sleep(5)
+                
                 #TODO: 
                 # if one more game = pub 'START_GAME'
                 game_status.last_status = game_status.status
