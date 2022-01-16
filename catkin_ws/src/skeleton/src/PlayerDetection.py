@@ -10,14 +10,14 @@ from sensor_msgs.msg import Image
 from ros_openpose.msg import Frame
 from skeleton.msg import Players,Player
 from geometry_msgs.msg import Pose,PoseArray,PoseStamped
+from temi_driver.msg import TemiCMD
+from game.msg import GameStatus
+game_status = GameStatus()
 
 # cvbridge
 from cv_bridge import CvBridge
 bridge = CvBridge()
 
-targetid = 0
-PlayerNum = 3
-alive = [1,1,1]
 player_stack = Players()
 
 def visualizationOnFakeMap(x,y,radius,color,thicc):
@@ -26,17 +26,30 @@ def visualizationOnFakeMap(x,y,radius,color,thicc):
     fakemap = cv2.circle(fakemap, (int(y*ratio+fakemap.shape[1]/2), int(x*ratio)), radius, color=color, thickness = thicc)
 
 def player_cb(msg):
-    global fakemap, PlayerNum
+    global fakemap, game_status, start_time, player_stack, gamestatud_pub
+
+    if not game_status.status=='DETECT_STARTED':
+        return
+
     for player in msg.players:
         player_stack.players.append(player)
 
         visualizationOnFakeMap(player.position.position.x, player.position.position.y, 3, getColor(player.id), 1)
 
-        if player.id >-1 and player.id<PlayerNum:
+        if player.id >-1 and player.id<game_status.player_num:
             print('Player %d with score %f at (%f, %f).'%(player.id, player.score, player.position.position.x, player.position.position.y))
 
     cv2.imshow('Mymap',fakemap)
     cv2.waitKey(1)
+
+    if game_status.status == 'DETECT_STARTED':
+        if (rospy.Time.now() - start_time).to_sec()>10 and len(player_stack.players)>game_status.player_num*25:
+            playerpub.publish(ClusterPlayers())
+            player_stack = Players()
+
+            game_status.last_status = game_status.status
+            game_status.status = 'CHECKOUT_STARTED'
+            gamestatud_pub.publish(game_status)
 
 def getColor(id):
 
@@ -50,21 +63,19 @@ def getColor(id):
         color = (255,255,255)
     return color 
 
-
 # collect positions
-def CollectPsitions(players):
+def CollectPositions(players):
     pos = []
     for player in players.players:
         pos.append((player.position.position.x, player.position.position.y))
 
     return pos
 
-
 def ClusterPlayers():
     global PlayerNum, fakemap
 
-    pos = CollectPsitions(player_stack)
-    cluster = DBSCAN(eps=0.5, min_samples=5).fit(pos)
+    pos = CollectPositions(player_stack)
+    cluster = DBSCAN(eps=0.6, min_samples=10).fit(pos)
     #cluster = KMeans(n_clusters=2, random_state=0).fit(pos)
 
     ClusterNum = -1
@@ -96,11 +107,11 @@ def ClusterPlayers():
         if len(collection)==0:
             continue
 
-        vote = np.zeros(PlayerNum, dtype=float)
+        vote = np.zeros(game_status.player_num, dtype=float)
         player = Player()
         for temp in collection:
             
-            if temp.id<0 or temp.id>=PlayerNum or alive[temp.id]==0:
+            if temp.id<0 or temp.id>=game_status.player_num or game_status.alive[temp.id]==0:
                 temp.id=-1
                 
             if temp.id>-1 and temp.id_score > 0.0:
@@ -130,34 +141,34 @@ def ClusterPlayers():
     cv2.waitKey(1)
 
     return players
-
-def command_cb(msg):
-    global player_stack
-    if msg == 'DETECT':
-        playerpub.publish(ClusterPlayers())
-        player_stack = Players()
+    
+def gamestatus_cb(msg):
+    global game_status, start_time, cmd_pub
+    game_status = msg
+    if game_status.status == 'DETECT_STARTED' and (not game_status.last_status == 'DETECT_STARTED'):
+        start_time = rospy.Time.now()
+        cmd_pub.publish(TemiCMD('cmd','scan'))
 
 def main():
-    global id, goalpub, tfbuf, player_stack, targetid, fakemap, playerpub
+    global id, goalpub, tfbuf, player_stack, fakemap, playerpub, gamestatud_pub, start_time, cmd_pub
 
     rospy.init_node('HistoryDetection', anonymous=False)
 
+    start_time = rospy.Time.now()
     fakemap = np.zeros((600,600,3), dtype=np.uint8)
     cv2.imshow('Mymap', fakemap)
 
-    playerpub = rospy.Publisher('/players/final', Players, queue_size=10)
+    rospy.Subscriber('/game_status', GameStatus, callback=gamestatus_cb, queue_size=10)
     rospy.Subscriber('/players/withscore', Players,  callback=player_cb, queue_size=10)
-    rospy.Subscriber('/game', String,  callback=command_cb, queue_size=10)
+    playerpub = rospy.Publisher('/players/final', Players, queue_size=10)
+    gamestatud_pub = rospy.Publisher('/game_status', GameStatus, queue_size=10)
+    cmd_pub = rospy.Publisher('temi_cmd', TemiCMD, queue_size=10)
 
     rate = rospy.Rate(10)
     while not rospy.is_shutdown():
 
         cv2.imshow('Mymap', fakemap)
-        key = cv2.waitKey(1)
-        if key == 27:
-            ClusterPlayers()
-            playerpub.publish(ClusterPlayers())
-            player_stack = Players()
+        cv2.waitKey(1)
         rate.sleep()
     
 if __name__ == '__main__':

@@ -1,50 +1,57 @@
 #!/usr/bin/env python3
 
-import cv2
-import numpy as np
-from numpy.core.defchararray import asarray
-from numpy.lib.type_check import imag
-import rospy
 import os
-from cv_bridge import CvBridge
+import cv2
+import json
+import rospy
+import numpy as np
+
+# msg
+from std_msgs.msg import String
 from sensor_msgs.msg import Image
 from ros_openpose.msg import Frame
-from skeleton.msg import Player, Players
+from temi_driver.msg import TemiCMD
+from game.msg import GameStatus
+
+from cv_bridge import CvBridge
 bridge = CvBridge()
 
-face_id = input('\n enter user id (MUST be an integer) and press <return> -->  ')
-print("\n [INFO] Initializing face capture. Look the camera and wait ...")
+# Game status
+game_status = GameStatus()
 
 dir_path = os.path.dirname(os.path.realpath(__file__))
+players_path = os.path.join(dir_path, 'players.json')
 
+# player list 
+players_data = {'names':[]}
+count = 0
+
+# read the players.json file to know player numbers and names
+def getPlayerList():
+    global players_data
+
+    if os.path.exists(players_path):
+        print('Found players data, ready to load...')
+        with open(players_path) as f:
+            players_data = json.load(f)
+    else:
+        players_data = {'names':[]}
+
+# initialize the face recognition moudle
 def initFaceRec():
-    global recognizer, faceCascade, font
-    recognizer = cv2.face.LBPHFaceRecognizer_create()
-    recognizer.read(os.path.join(dir_path,'trainer.yml'))
+    global faceCascade, font
 
+    print('Initialize the face recognition module...')
     face_cascade_Path = os.path.join(dir_path,'haarcascade_frontalface_default.xml')
     faceCascade = cv2.CascadeClassifier(face_cascade_Path)
 
     font = cv2.FONT_HERSHEY_SIMPLEX
 
-id = 0
-# names related to ids: The names associated to the ids: 1 for Mohamed, 2 for Jack, etc...
-names = ['brain','ariel', 'jj'] # add a name into this list
-#Video Capture
-cam = cv2.VideoCapture(0)
-cam.set(3, 640)
-cam.set(4, 480)
-# Min Height and Width for the  window size to be recognized as a face
-minW = 0.1 * cam.get(3)
-minH = 0.1 * cam.get(4)
-
-def image_cb(msg):
-    global target_image
-    target_image = bridge.imgmsg_to_cv2(msg)
-
+# check if the joint is detected
 def isJointValid(j):
     return j.pixel.x>0.0 or j.pixel.y>0.0
 
+# crop a picture around the head
 def getHeadPic(img, s):
     
     bbx = np.asarray((0,0,img.shape[1], img.shape[0]), dtype=float)
@@ -55,54 +62,113 @@ def getHeadPic(img, s):
             bbx[1] = max(bbx[1], s.bodyParts[i].pixel.y)
             bbx[2] = min(bbx[2], s.bodyParts[i].pixel.x)
             bbx[3] = min(bbx[3], s.bodyParts[i].pixel.y)
-    bbx = np.int0(bbx)
+
+    size = (2.2*(bbx[1]-bbx[3])/2, 1.8*(bbx[0]-bbx[2])/2)
 
     # inflate the range
-    bbx[1] = min(img.shape[0], bbx[1]+100)
-    bbx[3] = max(0, bbx[3]-100)
+    bbx[1] = min(img.shape[0], bbx[1]+size[1])
+    bbx[3] = max(0, bbx[3]-size[1])
 
-    bbx[0] = min(img.shape[1], bbx[0]+75)
-    bbx[2] = max(0, bbx[2]-75)
+    bbx[0] = min(img.shape[1], bbx[0]+size[0])
+    bbx[2] = max(0, bbx[2]-size[0])
 
-    return img[bbx[3]:bbx[1], bbx[2]:bbx[0], :]
-    
+    bbx = np.int0(bbx)
 
-count = 0
+    ret = img[bbx[3]:bbx[1], bbx[2]:bbx[0], :]
+    if len(ret)==0:
+        return None
+    return ret
+
+# image callback to retrieve the currebnt image
+def image_cb(msg):
+    global target_image
+    target_image = bridge.imgmsg_to_cv2(msg)
+
+# get skeleton
 def frame_cb(msg):
-    global target_image, count
+    global target_image, count, player_name
 
-    if target_image is None:
+    if target_image is None or \
+        not game_status.status == 'REGISTER':
         return
 
     for skeleton in msg.persons:
-        img = getHeadPic(target_image, skeleton)
-        gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
 
-        faces = faceCascade.detectMultiScale(gray, 1.3, 5)
+        # get head pic
+        img = getHeadPic(target_image, skeleton)
+        if img is None:
+            print('I found your head, but sorry.')
+            continue
+
+        gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+        faces = faceCascade.detectMultiScale(gray, 1.3, 5, minSize = (int(img.shape[1]*0.7), int(img.shape[0]*0.7)))
 
         for (x,y,w,h) in faces:
             cv2.rectangle(img, (x,y), (x+w,y+h), (255,0,0), 2)
             count += 1
+            print(count)
+
             # Save the captured image into the images directory
-            cv2.imwrite(os.path.join(dir_path,'images/Users.') + str(face_id) + '.' + str(count) + ".jpg", gray[y:y+h,x:x+w])
+            cv2.imwrite(os.path.join(dir_path,'images/%s.'%(player_name)) + str(players_data['names'].index(player_name)) + '.' + str(count) + ".jpg", gray[y:y+h,x:x+w])
             cv2.imshow('image', img)
             cv2.waitKey(1)
+
             if count>100:
-                break
-        if count>100:
-            break
+                stopDetect()
+                return
 
+# called when the numbers of images are enough
+def stopDetect():
+    global game_pub, temi_pub
 
+    game_pub.publish('STOP_FACEDETECTION')
+    game_pub.publish('STOP_OPENPOSE')
+    temi_pub.publish(TemiCMD('cmd', 'register_done'))
+
+    with open(players_path, 'w') as f:
+        json.dump(players_data, f)
+
+    print('Enough data received, stop detection...')
+
+# called whenever a player name is passed
+def name_cb(msg):
+    global game_pub, player_name, players_data, count
+    player_name = msg.data.replace(' ','_')
+
+    if player_name in players_data['names']:
+        print('This player is already exist.')
+        temi_pub.publish(TemiCMD('cmd', 'register_done'))
+    else:
+        print('Start register player, %s, reset image count.'%(player_name))
+        count = 0
+        players_data['names'].append(player_name)
+        game_pub.publish('START_FACEDETECTION')
+        game_pub.publish('START_OPENPOSE')
+
+# update the game status 
+def gamestatus_cb(msg):
+    global game_status, temi_pub
+    game_status = msg
+
+    if game_status.status == 'REGISTER':
+        temi_pub.publish(TemiCMD('cmd', 'tiltAngle,30'))
+
+# main loop
 def main():
-    global image_pub, img, target_image
+    global image_pub, img, target_image, game_pub, temi_pub
 
     target_image = None
     rospy.init_node('face_recognition', anonymous=False)
 
+    getPlayerList()
     initFaceRec()
 
+    rospy.Subscriber('/game_status', GameStatus, callback=gamestatus_cb, queue_size=10)
     rospy.Subscriber("/frame", Frame, callback=frame_cb, queue_size = 10)
-    rospy.Subscriber('/camera/raw', Image, callback=image_cb, queue_size=1)
+    rospy.Subscriber('/camera/facedetection', Image, callback=image_cb, queue_size=1)
+    rospy.Subscriber('/register/name', String, callback=name_cb, queue_size=1)
+    game_pub = rospy.Publisher('/game', String, queue_size=10)
+    temi_pub = rospy.Publisher('/temi_cmd', TemiCMD, queue_size=10)
 
     rospy.spin()
 

@@ -19,9 +19,10 @@ bridge = CvBridge()
 
 targetid = 0
 player_stack = Players()
+poses = PoseArray()
 
 def mouse(event, x, y, flag, parms):
-    global player_stack, targetid
+    global player_stack, targetid, poses
 
     if event==1:
 
@@ -32,6 +33,12 @@ def mouse(event, x, y, flag, parms):
         stamp_pos.header.stamp = rospy.Time.now()
         stamp_pos.pose.position.y = (x-fakemap.shape[1]/2.0)/100.0
         stamp_pos.pose.position.x = y/100.0
+
+        new_pose = Pose()
+        new_pose.position.x = stamp_pos.pose.position.x
+        new_pose.position.y = stamp_pos.pose.position.y
+        new_pose.position.z = 0.0
+        poses.poses.append(new_pose)
 
         # Add frame transformation to get the correct position in the map frame
         transform = tfbuf.lookup_transform('map', 'temi', rospy.Time.now(), rospy.Duration(4.0))
@@ -47,15 +54,17 @@ def mouse(event, x, y, flag, parms):
     return
 
 def main():
-    global id, goalpub,tfbuf, player_stack, targetid, fakemap
+    global id, goalpub,tfbuf, player_stack, targetid, fakemap, pospub, poses
 
     rospy.init_node('findSkeleton', anonymous=False)
+
 
     fakemap = np.zeros((600,600), dtype=np.uint8)
     cv2.imshow('map', fakemap)
     cv2.setMouseCallback('map', mouse)
 
     playerpub = rospy.Publisher('/players/final', Players, queue_size=10)
+    pospub = rospy.Publisher('/players', PoseArray, queue_size=10)
 
     # tf initialization
     tfbuf = tf2_ros.Buffer(rospy.Duration(2.0))
@@ -69,9 +78,15 @@ def main():
         key = cv2.waitKey(1)
         
         if key == 27:
+
+            poses.header.frame_id='temi'
+            poses.header.stamp = rospy.Time.now()
+
             playerpub.publish(player_stack)
+            pospub.publish(poses)
             print('Publish {0} fake persons...'.format(len(player_stack.players)))
             player_stack = Players()
+            poses = PoseArray()
         elif key>=177 and key<=185:
             targetid=key-177
             print('Switch id to  %d'%targetid)

@@ -12,33 +12,51 @@ dir_path = os.path.dirname(os.path.realpath(__file__))
 
 bridge = CvBridge()
 
+op_publishing = False
+fd_publishing = False
 
-publishing = False
 def command_cb(msg):
-    global publishing
+    global op_publishing, fd_publishing
+
     msg = msg.data
     if msg=='START_OPENPOSE':
-        publishing=True
+        print('Start openpose')
+        op_publishing=True
     elif msg=='STOP_OPENPOSE':
-        publishing=False
+        print('Stop openpose')
+        op_publishing=False
+    elif msg=='START_FACEDETECTION':
+        print('Start face detection')
+        fd_publishing=True
+    elif msg=='STOP_FACEDETECTION':
+        print('Stop face detection')
+        fd_publishing=False
+    
+    cmd = msg.split(',')
+    print(cmd)
+    if len(cmd)>1:
+        if cmd[0]=='Register':
+            name_pub.publish(cmd[1])
 
-pub_count=0
 def imagecallback(msg):
-    global publishing, pub_count
+    global op_publishing, fd_publishing
 
-    pub_count -=1
-    if publishing and pub_count<=0:
-        image_pub.publish(msg)
-        pub_count=0
-        
+    if op_publishing:
+        opimg_pub.publish(msg)
+
+    if fd_publishing:
+        fdimg_pub.publish(msg)
     
 def main():
-    global image_pub
+    global opimg_pub, fdimg_pub, name_pub
 
     rospy.init_node('ImagePort', anonymous=False)
     rospy.Subscriber('/game', String,  callback=command_cb, queue_size=10)
     rospy.Subscriber('/camera/raw', Image, imagecallback, queue_size=1)
-    image_pub = rospy.Publisher("/camera/port",Image, queue_size = 1)
+    opimg_pub = rospy.Publisher("/camera/openpose",Image, queue_size = 1)
+    fdimg_pub = rospy.Publisher("/camera/facedetection",Image, queue_size = 1)
+    name_pub = rospy.Publisher('/register/name', String, queue_size=10)
+
     rospy.spin()
 
 if __name__ == '__main__':

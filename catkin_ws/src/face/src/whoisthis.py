@@ -1,18 +1,24 @@
 #!/usr/bin/env python3
 
+from glob import glob
 import cv2
 import numpy as np
 from numpy.core.defchararray import asarray
 from numpy.lib.type_check import imag
 import rospy
 import os
-from cv_bridge import CvBridge
+
+# msg
+from std_msgs.msg import String
 from sensor_msgs.msg import Image
 from ros_openpose.msg import Frame
 from skeleton.msg import Player, Players
-bridge = CvBridge()
+from game.msg import GameStatus
+game_status = GameStatus()
 
-PlayerNum=3
+# cv bridge import
+from cv_bridge import CvBridge
+bridge = CvBridge()
 
 dir_path = os.path.dirname(os.path.realpath(__file__))
 
@@ -25,9 +31,6 @@ def initFaceRec():
     faceCascade = cv2.CascadeClassifier(face_cascade_Path)
 
     font = cv2.FONT_HERSHEY_SIMPLEX
-
-# names related to ids: The names associated to the ids: 1 for Mohamed, 2 for Jack, etc...
-names = ['brian','ariel', 'jj'] # add a name into this list
 
 def image_cb(msg):
     global target_image
@@ -68,7 +71,7 @@ def getHeadPic(img, s):
 def frame_cb(msg):
     global target_image
 
-    if target_image is None:
+    if (target_image is None) or (not game_status.status=='DETECT_STARTED'):
         return
 
     players = Players()
@@ -77,7 +80,8 @@ def frame_cb(msg):
         img = getHeadPic(target_image, skeleton)
         if img is None:
             continue
-
+        cv2.imshow('123',img)
+        cv2.waitKey(1)
         try:
             gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
         except:
@@ -98,7 +102,10 @@ def frame_cb(msg):
             new_id, conf = recognizer.predict(gray[y:y + h, x:x + w])
             if conf < 100 and conf>confidence:
                 id = new_id
-                myname = names[id]
+                try:
+                    myname = game_status.names[id]
+                except:
+                    print(game_status.names, id)
                 confidence = conf
 
         if id >= 0:
@@ -113,15 +120,23 @@ def frame_cb(msg):
         player.posture.skeleton = skeleton
         players.players.append(player)
 
-        if player.id >-1 and player.id<PlayerNum:
+        if player.id >-1 and player.id<game_status.player_num:
             print('Player %d with score %f at (%f, %f).'%(player.id, player.score, player.position.position.x, player.position.position.y))
-
 
     playerpub.publish(players)
 
+def gamestatus_cb(msg):
+    global game_status, game_pub
+    game_status = msg
+    
+    # Start Detection stage!!!!!!!!!!!!!!
+    if game_status.status=='DETECT_STARTED' and game_status.last_status=='DISPLAY_POSE':
+        rospy.sleep(2)
+        game_pub.publish('START_FACEDETECTION')
+        game_pub.publish('START_OPENPOSE')
 
 def main():
-    global image_pub, img, playerpub, target_image
+    global image_pub, img, playerpub, target_image, game_pub
 
     target_image = None
     rospy.init_node('FaceRecognition', anonymous=False)
@@ -129,8 +144,10 @@ def main():
     initFaceRec()
 
     rospy.Subscriber("/frame", Frame, callback=frame_cb, queue_size = 10)
-    rospy.Subscriber('/camera/raw', Image, callback=image_cb, queue_size=1)
+    rospy.Subscriber('/camera/facedetection', Image, callback=image_cb, queue_size=1)
+    rospy.Subscriber('/game_status', GameStatus, callback=gamestatus_cb, queue_size=10)
     playerpub = rospy.Publisher('/players/withid', Players, queue_size=10)
+    game_pub = rospy.Publisher('/game', String, queue_size=10)
 
     rospy.spin()
 

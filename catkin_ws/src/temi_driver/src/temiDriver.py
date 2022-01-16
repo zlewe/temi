@@ -32,29 +32,12 @@ def on_connect(client, userdata, flags, rc):
     # client.subscribe("position")
     client.subscribe("map")
     client.subscribe("status")
+    client.subscribe("game")
 
 # The callback for when a PUBLISH message is received from the server.
 def on_message(client, userdata, msg):
     rospy.loginfo(msg.topic)
 
-    '''if msg.topic == 'position':
-        # rospy.loginfo(pos)
-        pos = msg.payload.decode('utf-8').split(',')
-        orientation = quaternion_from_euler(0, 0, float(pos[2]))
-
-        pose = PoseStamped()
-        pose.header.frame_id = 'map'
-        pose.header.stamp = rospy.Time.now()
-        pose.pose.position.x = float(pos[0])
-        pose.pose.position.y = float(pos[1])
-        pose.pose.orientation.x = orientation[0]
-        pose.pose.orientation.y = orientation[1]
-        pose.pose.orientation.z = orientation[2]
-        pose.pose.orientation.w = orientation[3]
-
-        pubpose.publish(pose)
-
-    el'''
     if msg.topic == 'status':
         status = msg.payload.decode('utf-8')
         sm = String()
@@ -94,6 +77,9 @@ def on_message(client, userdata, msg):
 
         pubmap.publish(og)
 
+    elif msg.topic == 'game':
+        game_pub.publish(msg.payload)
+
 def goal_cb(msg):
 
     try:
@@ -125,10 +111,11 @@ def move_cb(data):
     r.sleep()
 
 def cmd_cb(cmd):
-    print(cmd)
-    r = rospy.Rate(10)
+    r = rospy.Rate(10)  
     mclient.publish(cmd.type, cmd.arg)
     r.sleep()
+
+    
     
 def main():
     global mclient
@@ -136,6 +123,7 @@ def main():
     global pubmap
     global pubstatus
     global tfbuf
+    global game_pub
 
 
     mclient = mqtt.Client(client_id="cmd_node")
@@ -151,6 +139,7 @@ def main():
     pubpose = rospy.Publisher('pose', PoseStamped, queue_size=5)
     pubmap = rospy.Publisher('temi_map', OccupancyGrid, latch=True, queue_size=1)
     pubstatus = rospy.Publisher('status', String, queue_size=5)
+    game_pub = rospy.Publisher('game', String, queue_size=5)
     rospy.Subscriber('move_base_simple/goal', PoseStamped,  goal_cb)
     rospy.loginfo("Start temi driver")
 
@@ -161,6 +150,7 @@ def main():
     mclient.publish("cmd", "tiltAngle,"+str(0))
     mclient.loop_start()
     mclient.publish("cmd", "loadMap")
+
     rospy.spin()
 
     # Blocking call that processes network traffic, dispatches callbacks and

@@ -15,6 +15,8 @@ from ros_openpose.msg import Frame
 from skeleton.msg import Players
 from geometry_msgs.msg import Pose,PoseArray,PoseStamped
 from temi_driver.msg import TemiCMD
+from game.msg import GameStatus
+game_status = GameStatus()
 
 # cvbridge
 from cv_bridge import CvBridge
@@ -36,13 +38,12 @@ id = 0
 moving = False
 goal = None
 
+
 def pickPoseture():
     global id, cmd_pub
     id = np.random.randint(0,9, size=1, dtype=int)[0]
 
-    cmd = TemiCMD()
-    cmd.type = 'cmd'
-    cmd.arg = 'imitate,%s'%(poses[id][0])
+    cmd = TemiCMD('cmd', 'imitate,%s'%(poses[id][0]))
     print(poses[id][0], id)
 
     cmd_pub.publish(cmd)
@@ -59,6 +60,10 @@ def compare(players):
 
     if moving:
         return
+
+    if not game_status.status=='DETECT_STARTED':
+        return
+
 
     for player in players.players:
         mypose = ss.toNumpyArray(player.posture.skeleton.bodyParts)
@@ -77,17 +82,23 @@ def compare(players):
 
     player_pub.publish(players)
     
+def gamestatus_cb(msg):
+    global game_status, target_pos
+
+    game_status = msg
+
+    if game_status.status=='DISPLAY_POSE' and game_status.last_status=='START_GAME':
+        target_pos = pickPoseture()
+
 def main():
-    global id, goalpub, tfbuf, player_pub, cmd_pub, target_pos
+    global id, player_pub, cmd_pub, target_pos, game_status
 
     rospy.init_node('PostureCheck', anonymous=False)
 
     rospy.Subscriber('/players/withpos', Players, callback=compare, queue_size = 10)
+    rospy.Subscriber('/game_status', GameStatus, callback=gamestatus_cb, queue_size=10)
     player_pub = rospy.Publisher('players/withscore', Players, queue_size=10)
     cmd_pub = rospy.Publisher('temi_cmd', TemiCMD, queue_size=10)
-
-    rospy.sleep(1)
-    target_pos = pickPoseture()
     rospy.spin()
 
 if __name__ == '__main__':
