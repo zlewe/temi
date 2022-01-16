@@ -5,7 +5,6 @@ import cv2
 import json
 import rospy
 import numpy as np
-import pickle
 
 # msg
 from std_msgs.msg import String
@@ -20,14 +19,14 @@ bridge = CvBridge()
 # Game status
 game_status = GameStatus()
 
-src_path = os.path.dirname(os.path.realpath(__file__))
-imgs_path = os.path.join(src_path, 'images')
-players_path = os.path.join(src_path, 'players.json')
+dir_path = os.path.dirname(os.path.realpath(__file__))
+players_path = os.path.join(dir_path, 'players.json')
 
 # player list 
 players_data = {'names':[]}
-new_resgister = {}
 count = 0
+
+no_face_times=0
 
 # read the players.json file to know player numbers and names
 def getPlayerList():
@@ -45,7 +44,7 @@ def initFaceRec():
     global faceCascade, font
 
     print('Initialize the face recognition module...')
-    face_cascade_Path = os.path.join(src_path,'haarcascade_frontalface_default.xml')
+    face_cascade_Path = os.path.join(dir_path,'haarcascade_frontalface_default.xml')
     faceCascade = cv2.CascadeClassifier(face_cascade_Path)
 
     font = cv2.FONT_HERSHEY_SIMPLEX
@@ -89,7 +88,7 @@ def image_cb(msg):
 
 # get skeleton
 def frame_cb(msg):
-    global target_image, count, player_name
+    global target_image, count, player_name, no_face_times
 
     if target_image is None or \
         not game_status.status == 'REGISTER':
@@ -100,11 +99,20 @@ def frame_cb(msg):
         # get head pic
         img = getHeadPic(target_image, skeleton)
         if img is None:
-            print('I found your head, but sorry.')
             continue
 
         gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
         faces = faceCascade.detectMultiScale(gray, 1.3, 5, minSize = (int(img.shape[1]*0.7), int(img.shape[0]*0.7)))
+
+        if len(faces)==0:
+            print('No face detected!')
+            no_face_times += 1
+            if no_face_times>15:
+                cmd_pub.publish(TemiCMD('cmd','no_face'))
+            return
+        else:
+            cmd_pub.publish(TemiCMD('cmd','yes_face'))
+            no_face_times = 0
 
         for (x,y,w,h) in faces:
             cv2.rectangle(img, (x,y), (x+w,y+h), (255,0,0), 2)
@@ -112,7 +120,7 @@ def frame_cb(msg):
             print(count)
 
             # Save the captured image into the images directory
-            cv2.imwrite(os.path.join(src_path,'images/%s.'%(player_name)) + str(players_data['names'].index(player_name)) + '.' + str(count) + ".jpg", gray[y:y+h,x:x+w])
+            cv2.imwrite(os.path.join(dir_path,'images/%s.'%(player_name)) + str(players_data['names'].index(player_name)) + '.' + str(count) + ".jpg", gray[y:y+h,x:x+w])
             cv2.imshow('image', img)
             cv2.waitKey(1)
 
@@ -120,19 +128,13 @@ def frame_cb(msg):
                 stopDetect()
                 return
 
-
-def getAllRegisterPlayer():
-    os.listdir()
-
 # called when the numbers of images are enough
 def stopDetect():
     global game_pub, temi_pub
 
     game_pub.publish('STOP_FACEDETECTION')
     game_pub.publish('STOP_OPENPOSE')
-    
-    player_list = print(str(players_data['names'])[1:-1].replace('\'','').replace(' ',''))
-    temi_pub.publish(TemiCMD('cmd', 'register_done,'+player_list))
+    temi_pub.publish(TemiCMD('cmd', 'register_done'))
 
     with open(players_path, 'w') as f:
         json.dump(players_data, f)
@@ -142,13 +144,9 @@ def stopDetect():
 # called whenever a player name is passed
 def name_cb(msg):
     global game_pub, player_name, players_data, count
-
-    # normalize the player name
     player_name = msg.data.replace(' ','_')
-    playerfilepath = os.path.join(src_path, '%d.json'%(player_name))
-    
-    if os.path.exists(playerfilepath):
-    #if player_name in players_data['names']:
+
+    if player_name in players_data['names']:
         print('This player is already exist.')
         temi_pub.publish(TemiCMD('cmd', 'register_done'))
     else:
@@ -160,7 +158,7 @@ def name_cb(msg):
 
 # update the game status 
 def gamestatus_cb(msg):
-    global game_status, temi_pub
+    global game_status
     game_status = msg
 
     if game_status.status == 'REGISTER':
@@ -168,7 +166,7 @@ def gamestatus_cb(msg):
 
 # main loop
 def main():
-    global image_pub, img, target_image, game_pub, temi_pub
+    global image_pub, img, target_image, game_pub, temi_pub ,cmd_pub
 
     target_image = None
     rospy.init_node('face_recognition', anonymous=False)
@@ -182,6 +180,7 @@ def main():
     rospy.Subscriber('/register/name', String, callback=name_cb, queue_size=1)
     game_pub = rospy.Publisher('/game', String, queue_size=10)
     temi_pub = rospy.Publisher('/temi_cmd', TemiCMD, queue_size=10)
+    cmd_pub = rospy.Publisher('temi_cmd', TemiCMD, queue_size=5)
 
     rospy.spin()
 

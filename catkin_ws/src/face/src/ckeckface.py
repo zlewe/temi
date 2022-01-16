@@ -11,6 +11,7 @@ import os
 from std_msgs.msg import String
 from sensor_msgs.msg import Image
 from geometry_msgs.msg import PoseStamped, Vector3, Quaternion
+from visualization_msgs.msg import Marker,MarkerArray
 from temi_driver.msg import TemiCMD
 from skeleton.msg import Players
 from game.msg import GameStatus
@@ -30,11 +31,18 @@ detect_status = 'FINISH'    # READY, MOVING, DETECTING, FINISH
 
 players=Players()
 target_player=None
+
 recoreded=np.zeros(game_status.player_num, dtype=float)
 matrix=np.zeros((game_status.player_num, game_status.player_num)) #define empty matrix 
+
 person = 0
 row=[]
 
+no_face_times = 0
+
+def SetMatrix(num, arr):
+    global matrix
+    matrix[num] = arr
 
 def quaternion_from_euler(roll, pitch, yaw):
     cy = math.cos(yaw * 0.5)
@@ -63,7 +71,7 @@ def initFaceRec():
 
 # callback function for image
 def image_cb(msg):
-    global target_image, recognizer, recoreded, alive, detect_status, names, matrix
+    global target_image, recognizer, recoreded, alive, detect_status, names, matrix,  no_face_times
 
     if (detect_status == "DETECTING"):
         target_image = bridge.imgmsg_to_cv2(msg)
@@ -85,7 +93,13 @@ def image_cb(msg):
 
         if id<0 or id>=game_status.player_num or game_status.alive[id]<0:
             print('No face detected!')
+            no_face_times += 1
+            if no_face_times>7:
+                cmd_pub.publish(TemiCMD('cmd','no_face'))
             return
+        else:
+            cmd_pub.publish(TemiCMD('cmd','yes_face,'+game_status.names[id]))
+            no_face_times = 0
 
         if id>-1:
             recoreded[id] += confidence
@@ -93,17 +107,19 @@ def image_cb(msg):
 
         
         if np.max(recoreded)>500.0:
-            target_player.id = np.argmax(recoreded)
-            print('I think this is player %d'%(target_player.id))
-            sum = 0           
-            #allplayer.append(target_player.id)  
+            players.players[person].id = np.argmax(recoreded)
+            '''sum = 0           
             for i in range(game_status.player_num):
                 sum += recoreded[i]
             for i in range(game_status.player_num):
-                recoreded[i] = (recoreded[i]/sum)
-            matrix[person] = recoreded 
+                recoreded[i] = (recoreded[i]/sum)'''
 
-            if target_player.score<0.8:
+            recoreded = recoreded/np.sum(recoreded)
+            print('I think this could be player {0}, with confidence {1}'.format(players.players[person].id, recoreded))
+            SetMatrix(person, recoreded)
+            players.players[person].confidence_array = recoreded
+
+            if players.players[person].score<0.8:
                 cmd = TemiCMD('cmd','out, YOU!')
                 cmd_pub.publish(cmd)
 
@@ -117,6 +133,7 @@ def player_cb(msg):
     players = msg
     detect_status = 'READY'
 
+    print('Start the Checkout Stage, initialize the matrix.......')
     recoreded=np.zeros(game_status.player_num, dtype=float)
     matrix=np.zeros((game_status.player_num, game_status.player_num)) #define empty matrix 
     row=[]
@@ -125,7 +142,7 @@ def player_cb(msg):
 # !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 # Start one new checkout stage
 def GoToCheckout(player):
-    global goal_pub, detect_status, target_player, recoreded, target_pos
+    global goal_pub, detect_status, target_player, recoreded, target_pos, cmd_pub
 
     if detect_status=='READY':
         print('Unknown person founded! Go checkout! => (%f, %f)'%(player.position.position.x, player.position.position.y))
@@ -152,17 +169,17 @@ def GoToCheckout(player):
         # Reset recoreded confidence
         recoreded=np.zeros(game_status.player_num, dtype=float)
 
+        cmd_pub.publish(TemiCMD('cmd','scan_another'))
+
 # receiving temi status
 def status_cb(msg):
     global temi_status, detect_status, cmd_pub
 
     status = msg.data.split(',')
-    #print(status)
 
     if status[0] == 'goToStatus':
 
         temi_status = status[1].upper()
-        #print('temi_status: '+temi_status+' detect_status: '+detect_status)
 
         if detect_status=='READY':
             if temi_status=='COMPLETE':
@@ -171,14 +188,8 @@ def status_cb(msg):
                 detect_status = 'MOVING'
         elif detect_status=='MOVING':
             if temi_status=='COMPLETE':
-                # position and orientation
-                error = pow((target_player.position.position.x-target_pos.pose.position.x), 2)+pow((target_player.position.position.y-target_pos.pose.position.y),2)
-                print('I want ot go to there, but end up with error %f'%error)
                 
-                #if(error>0.25):
-
                 theta = math.atan2((target_player.position.position.y-temi_position.pose.position.y), (target_player.position.position.x-temi_position.pose.position.x))
-                # target_pos.pose.orientation = theta
                 orientation = quaternion_from_euler(0, 0, theta)
 
                 pose = PoseStamped()
@@ -191,10 +202,10 @@ def status_cb(msg):
                 pose.pose.orientation.z = orientation[2]
                 pose.pose.orientation.w = orientation[3]
 
+                print('Start turning process to\n{0} %f'.format(pose.pose))
                 goal_pub.publish(pose) 
                 detect_status = 'TURNING'
                 temi_status = 'MOVING'
-                #print('Fail to go to target pose, try turn another direction.......')
             elif temi_status=='MOVING':
                 detect_status = 'MOVING'
 
@@ -225,8 +236,6 @@ def status_cb(msg):
             elif temi_status=='MOVING':
                 detect_status = 'STOP'
 
-        print('=>> temi_status: '+temi_status+' detect_status: '+detect_status)
-
 def temi_posi(msg):
     global temi_position
     temi_position = msg
@@ -235,8 +244,31 @@ def gamestatus_cb(msg):
     global game_status, gamestatud_pub
     game_status = msg
 
+
+def MakeMarker(markerarray, x, y, frame='temi', type=Marker.SPHERE, scale=0.1, text=''):
+    marker = Marker()
+
+    marker.id = len(markerarray.markers)
+    marker.header.stamp = rospy.Time.now()
+    marker.header.frame_id = frame
+    marker.pose.position.x = x
+    marker.pose.position.y = y
+    marker.pose.position.z = 0.0
+    marker.pose.orientation.x = 0
+    marker.pose.orientation.y = 0
+    marker.pose.orientation.z = 0
+    marker.pose.orientation.w = 1.0
+    marker.scale.x = marker.scale.y = marker.scale.z = scale
+    marker.color.a=1.0
+    marker.color.r=1.0
+    marker.type = type
+    marker.action = Marker.ADD
+    if type == Marker.TEXT_VIEW_FACING:
+        marker.text = text
+    return marker  
+
 def main():
-    global target_image, goal_pub, players, detect_status, cmd_pub, temi_position, person, matrix, game_status, gamestatud_pub
+    global target_image, goal_pub, players, detect_status, cmd_pub, temi_position, person, matrix, game_status, gamestatud_pub, pospub, namepub
 
     temi_position = PoseStamped()
     target_image = None
@@ -249,10 +281,12 @@ def main():
     rospy.Subscriber('/players/final', Players, callback=player_cb, queue_size=10)
     rospy.Subscriber('/status', String, callback=status_cb, queue_size=10)
     rospy.Subscriber('/pose', PoseStamped, callback=temi_posi, queue_size=10)
+    pospub = rospy.Publisher('/players', MarkerArray, queue_size=10)
     goal_pub = rospy.Publisher('move_base_simple/goal', PoseStamped, queue_size=10)
     cmd_pub = rospy.Publisher('temi_cmd', TemiCMD, queue_size=5)
     gamestatud_pub = rospy.Publisher('/game_status', GameStatus, queue_size=10)
     game_pub = rospy.Publisher('/game', String, queue_size=10)
+    namepub = rospy.Publisher('/players_name', MarkerArray, queue_size=10)
 
     rate = rospy.Rate(10)
     while not rospy.is_shutdown():
@@ -265,14 +299,21 @@ def main():
                     GoToCheckout(player)
                     break
                 else:
-                    matrix[person, player.id] = 1 if game_status.alive[player.id]==1 else 0
+                    SetMatrix(person, player.confidence_array)
                 person += 1
-            if finish:
-                matrix = 1 - matrix
-                row_ind, col_ind = linear_sum_assignment(matrix)
 
-                print(matrix)
-                print(col_ind)
+            if finish:
+
+                print('Original Confidence Matrix:',matrix)
+                for death_id in np.where(np.asarray(game_status.alive)==0):
+                    matrix[:, death_id] = 0.0
+                print('After remove death player:',matrix)
+
+                matrix = 1 - matrix
+                print('307, Reversed Confidence Matrix:',matrix)
+                row_ind, col_ind = linear_sum_assignment(matrix)
+                print('Final Result: {0}'.format(col_ind))
+
 
                 die_guy = ''
 
@@ -287,6 +328,22 @@ def main():
 
                         die_guy += game_status.names[players.players[i].id]+'  ' if game_status.alive[players.players[i].id]==0 else ''
 
+                markers = MarkerArray()
+                markers_name = MarkerArray()
+                for p in players.players:
+                    playername = 'unknown'
+                    if p.id>-1:
+                        playername = game_status.names[p.id]
+                    if p.score < 0.8:
+                        playername += ' die!'
+
+                    new_pose = MakeMarker(markers, p.position.position.x, p.position.position.y, frame='map', type=Marker.SPHERE, scale=0.1)
+                    markers.markers.append(new_pose)
+                    markers_name.markers.append(MakeMarker(markers_name, p.position.position.x, p.position.position.y+0.3, frame='map', type=Marker.TEXT_VIEW_FACING, scale=0.5, text=playername))
+                pospub.publish(markers)
+                namepub.publish(markers_name)
+
+
                 game_status.last_status = game_status.status
                 game_status.status = 'DETECT_END'
                 gamestatud_pub.publish(game_status)
@@ -297,9 +354,9 @@ def main():
                 rospy.sleep(1)
                 print('Send msg: %s'%(die_guy))
                 if len(die_guy)==0:
-                    cmd_pub.publish(TemiCMD('cmd','out,Nobody die!'))
+                    cmd_pub.publish(TemiCMD('cmdd','out,Nobody'))
                 else:
-                    cmd_pub.publish(TemiCMD('cmd','out,'+die_guy))
+                    cmd_pub.publish(TemiCMD('cmdd','out,'+die_guy))
 
                 # finish checkout progress, go back to front
                 # goal_pub.publish()

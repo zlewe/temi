@@ -69,7 +69,7 @@ def getHeadPic(img, s):
     
 
 def frame_cb(msg):
-    global target_image
+    global target_image, jj_pub, brian_pub, ariel_pub
 
     if (target_image is None) or (not game_status.status=='DETECT_STARTED'):
         return
@@ -102,17 +102,24 @@ def frame_cb(msg):
             new_id, conf = recognizer.predict(gray[y:y + h, x:x + w])
             if conf < 100 and conf>confidence:
                 id = new_id
-                try:
-                    myname = game_status.names[id]
-                except:
-                    print(game_status.names, id)
+                myname = game_status.names[id]
                 confidence = conf
 
         if id >= 0:
             cv2.putText(img, myname, (x + 5, y - 5), font, 1, (255, 255, 255), 2)
             cv2.putText(img, "  {0}%".format(round(100 - confidence)), (x + 5, y + h - 5), font, 1, (255, 255, 0), 1)
-            cv2.imshow('{0}'.format(myname),img)
-            cv2.waitKey(1)
+            '''cv2.imshow('{0}'.format(myname),img)
+            cv2.waitKey(1)'''
+
+            if id==0:
+                brian_pub.publish(bridge.cv2_to_imgmsg(img))
+            elif id==1:
+                ariel_pub.publish(bridge.cv2_to_imgmsg(img))
+            elif id==2:
+                jj_pub.publish(bridge.cv2_to_imgmsg(img))
+            else:
+                unknown_pub.publish(bridge.cv2_to_imgmsg(img))
+            
 
         player = Player()
         player.id = id
@@ -136,7 +143,7 @@ def gamestatus_cb(msg):
         game_pub.publish('START_OPENPOSE')
 
 def main():
-    global image_pub, img, playerpub, target_image, game_pub
+    global image_pub, img, playerpub, target_image, game_pub, jj_pub, brian_pub, ariel_pub, unknown_pub
 
     target_image = None
     rospy.init_node('FaceRecognition', anonymous=False)
@@ -148,6 +155,11 @@ def main():
     rospy.Subscriber('/game_status', GameStatus, callback=gamestatus_cb, queue_size=10)
     playerpub = rospy.Publisher('/players/withid', Players, queue_size=10)
     game_pub = rospy.Publisher('/game', String, queue_size=10)
+
+    jj_pub = rospy.Publisher('playerimg/jj', Image, queue_size=1)
+    brian_pub = rospy.Publisher('playerimg/brian', Image, queue_size=1)
+    ariel_pub = rospy.Publisher('playerimg/ariel', Image, queue_size=1)
+    unknown_pub = rospy.Publisher('playerimg/ariel', Image, queue_size=1)
 
     rospy.spin()
 

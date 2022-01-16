@@ -9,7 +9,7 @@ from std_msgs.msg import String
 from sensor_msgs.msg import Image
 from ros_openpose.msg import Frame
 from skeleton.msg import Players,Player
-from geometry_msgs.msg import Pose,PoseArray,PoseStamped
+from visualization_msgs.msg import Marker,MarkerArray
 from temi_driver.msg import TemiCMD
 from game.msg import GameStatus
 game_status = GameStatus()
@@ -71,8 +71,31 @@ def CollectPositions(players):
 
     return pos
 
+
+def MakeMarker(markerarray, x, y, frame='temi', type=Marker.SPHERE, scale=0.1, text=''):
+    marker = Marker()
+
+    marker.id = len(markerarray.markers)
+    marker.header.stamp = rospy.Time.now()
+    marker.header.frame_id = frame
+    marker.pose.position.x = x
+    marker.pose.position.y = y
+    marker.pose.position.z = 0.0
+    marker.pose.orientation.x = 0
+    marker.pose.orientation.y = 0
+    marker.pose.orientation.z = 0
+    marker.pose.orientation.w = 1.0
+    marker.scale.x = marker.scale.y = marker.scale.z = scale
+    marker.color.a=1.0
+    marker.color.r=1.0
+    marker.type = type
+    marker.action = Marker.ADD
+    if type == Marker.TEXT_VIEW_FACING:
+        marker.text = text
+    return marker  
+
 def ClusterPlayers():
-    global PlayerNum, fakemap
+    global PlayerNum, fakemap, pospub, namepub
 
     pos = CollectPositions(player_stack)
     cluster = DBSCAN(eps=0.6, min_samples=10).fit(pos)
@@ -81,6 +104,23 @@ def ClusterPlayers():
     ClusterNum = -1
     for i in cluster.labels_:
         ClusterNum = max(ClusterNum, i+1)
+
+    alive_num = np.sum(game_status.alive)
+    wanted_list = []
+    if ClusterNum > alive_num:
+        print('Detected player number (%d) is larger than alive player (%d).'%(ClusterNum, alive_num))
+
+        num_arr=np.zeros(ClusterNum, dtype=int)
+        for i in range(ClusterNum):
+            num_arr[i] = np.sum(np.where(cluster.labels_==i))
+
+        for i in range(alive_num):
+            max_arg = np.argmax(num_arr)
+            wanted_list.append(max_arg)
+            num_arr[max_arg]=-1
+    else:
+        wanted_list = range(ClusterNum)
+
     
     # build list for all cluster
     clustered_players = []
@@ -103,7 +143,9 @@ def ClusterPlayers():
         print('Collect %d player %d'%(len(clustered_players[i]), i))
 
     players = Players()
-    for collection in clustered_players:
+    for i in wanted_list:
+
+        collection = clustered_players[i]
         if len(collection)==0:
             continue
 
@@ -126,31 +168,53 @@ def ClusterPlayers():
 
         player.position.position.x /= len(collection)
         player.position.position.y /= len(collection)
+
         player.id = np.argmax(vote, axis=0)
         print(player.id, vote)
         if vote[player.id]<=0.0:
             player.id=-1
+        
+        sum = np.sum(vote)
+        if sum>0.0:
+            player.confidence_array = vote/np.sum(vote)
+        else:
+            player.confidence_array = vote
+
         players.players.append(player)
 
     print('Totally %d'%(len(players.players)))
 
-    for p in players.players:
+    markers = MarkerArray()
+    markers_name = MarkerArray()
 
+    for p in players.players:
         visualizationOnFakeMap(p.position.position.x, p.position.position.y, 10, getColor(p.id), 3)
+
+        playername = 'unknown'
+        if p.id>-1:
+            playername = game_status.names[p.id]
+        new_pose = MakeMarker(markers, p.position.position.x, p.position.position.y, frame='map', type=Marker.SPHERE, scale=0.1)
+        markers.markers.append(new_pose)
+        markers_name.markers.append(MakeMarker(markers_name, p.position.position.x, p.position.position.y+0.3, frame='map', type=Marker.TEXT_VIEW_FACING, scale=0.5, text=playername))
+
+    pospub.publish(markers)
+    namepub.publish(markers)
+
     cv2.imshow('Mymap',fakemap)
     cv2.waitKey(1)
 
     return players
     
 def gamestatus_cb(msg):
-    global game_status, start_time, cmd_pub
+    global game_status, start_time, cmd_pub, fakemap
     game_status = msg
     if game_status.status == 'DETECT_STARTED' and (not game_status.last_status == 'DETECT_STARTED'):
+        fakemap = np.zeros((600,600,3), dtype=np.uint8)
         start_time = rospy.Time.now()
         cmd_pub.publish(TemiCMD('cmd','scan'))
 
 def main():
-    global id, goalpub, tfbuf, player_stack, fakemap, playerpub, gamestatud_pub, start_time, cmd_pub
+    global id, goalpub, tfbuf, player_stack, fakemap, playerpub, gamestatud_pub, start_time, cmd_pub, pospub, namepub
 
     rospy.init_node('HistoryDetection', anonymous=False)
 
@@ -161,6 +225,8 @@ def main():
     rospy.Subscriber('/game_status', GameStatus, callback=gamestatus_cb, queue_size=10)
     rospy.Subscriber('/players/withscore', Players,  callback=player_cb, queue_size=10)
     playerpub = rospy.Publisher('/players/final', Players, queue_size=10)
+    pospub = rospy.Publisher('/players', MarkerArray, queue_size=10)
+    namepub = rospy.Publisher('/players_name', MarkerArray, queue_size=10)
     gamestatud_pub = rospy.Publisher('/game_status', GameStatus, queue_size=10)
     cmd_pub = rospy.Publisher('temi_cmd', TemiCMD, queue_size=10)
 

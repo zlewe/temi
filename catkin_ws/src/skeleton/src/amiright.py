@@ -1,13 +1,11 @@
 #!/usr/bin/env python
+import imp
 import os
 import pickle
 import numpy as np
-import math
-import cv2
 import rospy
+import random
 import Skesim as ss
-import tf2_ros
-import tf2_geometry_msgs
 
 # msg
 from sensor_msgs.msg import Image
@@ -37,11 +35,16 @@ id = 0
 
 moving = False
 goal = None
-
+id_list = range(len(poses))
+random.shuffle(id_list)
 
 def pickPoseture():
-    global id, cmd_pub
-    id = np.random.randint(0,9, size=1, dtype=int)[0]
+    global id, cmd_pub, id_list
+
+    id = id_list.pop()
+    if len(id_list)==0:
+        id_list = range(len(poses))
+        random.shuffle(id_list)
 
     cmd = TemiCMD('cmd', 'imitate,%s'%(poses[id][0]))
     print(poses[id][0], id)
