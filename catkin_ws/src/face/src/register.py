@@ -5,6 +5,7 @@ import cv2
 import json
 import rospy
 import numpy as np
+import pickle
 
 # msg
 from std_msgs.msg import String
@@ -19,11 +20,13 @@ bridge = CvBridge()
 # Game status
 game_status = GameStatus()
 
-dir_path = os.path.dirname(os.path.realpath(__file__))
-players_path = os.path.join(dir_path, 'players.json')
+src_path = os.path.dirname(os.path.realpath(__file__))
+imgs_path = os.path.join(src_path, 'images')
+players_path = os.path.join(src_path, 'players.json')
 
 # player list 
 players_data = {'names':[]}
+new_resgister = {}
 count = 0
 
 # read the players.json file to know player numbers and names
@@ -42,7 +45,7 @@ def initFaceRec():
     global faceCascade, font
 
     print('Initialize the face recognition module...')
-    face_cascade_Path = os.path.join(dir_path,'haarcascade_frontalface_default.xml')
+    face_cascade_Path = os.path.join(src_path,'haarcascade_frontalface_default.xml')
     faceCascade = cv2.CascadeClassifier(face_cascade_Path)
 
     font = cv2.FONT_HERSHEY_SIMPLEX
@@ -109,7 +112,7 @@ def frame_cb(msg):
             print(count)
 
             # Save the captured image into the images directory
-            cv2.imwrite(os.path.join(dir_path,'images/%s.'%(player_name)) + str(players_data['names'].index(player_name)) + '.' + str(count) + ".jpg", gray[y:y+h,x:x+w])
+            cv2.imwrite(os.path.join(src_path,'images/%s.'%(player_name)) + str(players_data['names'].index(player_name)) + '.' + str(count) + ".jpg", gray[y:y+h,x:x+w])
             cv2.imshow('image', img)
             cv2.waitKey(1)
 
@@ -117,13 +120,19 @@ def frame_cb(msg):
                 stopDetect()
                 return
 
+
+def getAllRegisterPlayer():
+    os.listdir()
+
 # called when the numbers of images are enough
 def stopDetect():
     global game_pub, temi_pub
 
     game_pub.publish('STOP_FACEDETECTION')
     game_pub.publish('STOP_OPENPOSE')
-    temi_pub.publish(TemiCMD('cmd', 'register_done'))
+    
+    player_list = print(str(players_data['names'])[1:-1].replace('\'','').replace(' ',''))
+    temi_pub.publish(TemiCMD('cmd', 'register_done,'+player_list))
 
     with open(players_path, 'w') as f:
         json.dump(players_data, f)
@@ -133,9 +142,13 @@ def stopDetect():
 # called whenever a player name is passed
 def name_cb(msg):
     global game_pub, player_name, players_data, count
-    player_name = msg.data.replace(' ','_')
 
-    if player_name in players_data['names']:
+    # normalize the player name
+    player_name = msg.data.replace(' ','_')
+    playerfilepath = os.path.join(src_path, '%d.json'%(player_name))
+    
+    if os.path.exists(playerfilepath):
+    #if player_name in players_data['names']:
         print('This player is already exist.')
         temi_pub.publish(TemiCMD('cmd', 'register_done'))
     else:
