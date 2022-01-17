@@ -51,7 +51,7 @@ def reset_time():
     start_time = rospy.Time.now()
 
 def start_the_round():
-    global move_status, temi_status, robotpose
+    global move_status, temi_status, robotpose, out_cmd, flag
     #go to start position
     print('start_the_round')
     cmd = TemiCMD("cmd", "origin_position")
@@ -59,6 +59,7 @@ def start_the_round():
     pub_cmd.publish(cmd)
     pub_cmd.publish(TemiCMD("cmd","goToPosition,"+START_POSITION))
     print("goToPosition")
+
     move_status = 'MOVING'
 
     #check if done moving
@@ -68,7 +69,11 @@ def start_the_round():
         rate.sleep()
 
     if game_status.last_status == "DETECT_END":
-        rospy.sleep(10)
+        if (out_cmd is not None) and (flag is True):
+            pub_cmd.publish(out_cmd)
+            print('send out!')
+            flag = False
+            rospy.sleep(5)
     
     print('countdown')
     for i in range(3,0,-1):
@@ -129,6 +134,15 @@ def pose_cb(msg):
 
     robotpose = msg.pose
 
+def cmd_cb(msg):
+    global out_cmd, flag
+
+    if msg.type == 'cmdd':
+        print("received out!")
+        out_cmd = msg
+        out_cmd.type = 'cmd'
+        flag = True
+
 def main():
     global pub_status
     global pub_cmd
@@ -136,13 +150,16 @@ def main():
     global game_status
     global rate
     global start_time
-    global move_status, temi_status
+    global move_status, temi_status, out_cmd, flag
 
+    out_cmd = None
+    flag = False
     # rospy.Subscriber('game', String, callback=game_cb)
     # pub = rospy.Publisher('game',String)
     rospy.Subscriber('game_status', GameStatus, callback=game_cb)
     rospy.Subscriber('status', String, callback=status_cb)
     rospy.Subscriber('pose', PoseStamped, callback=pose_cb)
+    rospy.Subscriber('temi_cmd', TemiCMD, callback=cmd_cb)
     pub_status = rospy.Publisher('game_status',GameStatus, queue_size=10)
     pub_cmd = rospy.Publisher('temi_cmd', TemiCMD, queue_size=10)
     rospy.init_node('game_loop', anonymous=False)
@@ -174,6 +191,11 @@ def main():
                 #check if done moving
                 while not (move_status == 'STOP' and temi_status == 'COMPLETE'):
                     rate.sleep()
+                if (out_cmd is not None) and (flag is True):
+                    pub_cmd.publish(out_cmd)
+                    print('send out!')
+                    flag = False
+                    rospy.sleep(5)
                 pub_cmd.publish(TemiCMD("cmd", "end,Nobody"))
                 rospy.sleep(6)
                 game_status.last_status = game_status.status
@@ -194,6 +216,11 @@ def main():
                 #check if done moving
                 while not (move_status == 'STOP' and temi_status == 'COMPLETE'):
                     rate.sleep()
+                if (out_cmd is not None) and (flag is True):
+                    pub_cmd.publish(out_cmd)
+                    print('send out!')
+                    flag = False
+                    rospy.sleep(5)
                 print('show_winner/s')
                 pub_cmd.publish(TemiCMD("cmd", "end,"+ winner))
                 rospy.sleep(6)
