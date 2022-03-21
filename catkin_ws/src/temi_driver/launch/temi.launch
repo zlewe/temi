@@ -9,4 +9,5 @@
   <node name="temiImageDriver" pkg="temi_driver" type="temiImageDriver.py" />
   <node name="temiMap" pkg="temi_driver" type="temiMap.py" />
   <node name="temiTf" pkg="temi_driver" type="tfPub.py" />
+  <node name="temiAudio" pkg="temi_driver" type="temiAudio.py" />
 </launch>

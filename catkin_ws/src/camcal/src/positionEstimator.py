@@ -3,15 +3,13 @@
 # -*- coding: utf-8 -*-
 import os
 import pickle
-from pydoc import text
 import numpy as np
 import cv2
 import rospy
-from ros_openpose.msg import Frame
-from skeleton.msg import Player, Players
-from cv_bridge import CvBridge
-from geometry_msgs.msg import Pose, PoseArray, PoseStamped
-from visualization_msgs.msg import Marker,MarkerArray
+
+# msgs
+from skeleton.msg import Players
+from geometry_msgs.msg import PoseStamped
 from game.msg import GameStatus
 game_status = GameStatus()
 
@@ -19,11 +17,10 @@ game_status = GameStatus()
 import tf2_ros
 import tf2_geometry_msgs
 
+# cvbridge
+from cv_bridge import CvBridge
 bridge = CvBridge()
 
-PlayerNum=3
-
-# Main loop receiving images from temi to calibrate
 cammat = None
 print('Load calibration matrices from cam.pickle...')
 dir_path = os.path.dirname(os.path.realpath(__file__))
@@ -31,7 +28,7 @@ with open(os.path.join(dir_path,'calibration.pickle'), 'rb') as handle:
     cammat = pickle.load(handle)
 
 print('Load the intrinsic matrix...')
-newcameramtx, _ = cv2.getOptimalNewCameraMatrix(cammat['mtx'], cammat['dist'], (1920,1080), 1, (1920,1080))
+newcameramtx,_ = cv2.getOptimalNewCameraMatrix(cammat['mtx'], cammat['dist'], (1920,1080), 1, (1920,1080))
 
 def toGround(x, y):
     pts = np.asarray((((x,y),),), dtype=np.float32)
@@ -57,40 +54,15 @@ def toGround(x, y):
 
     return vec[:2]*0.01
 
-def MakeMarker(markerarray, x, y, frame='temi', type=Marker.SPHERE, scale=0.1, text=''):
-    marker = Marker()
-
-    marker.id = len(markerarray.markers)
-    marker.header.stamp = rospy.Time.now()
-    marker.header.frame_id = frame
-    marker.pose.position.x = x
-    marker.pose.position.y = y
-    marker.pose.position.z = 0.0
-    marker.pose.orientation.x = 0
-    marker.pose.orientation.y = 0
-    marker.pose.orientation.z = 0
-    marker.pose.orientation.w = 1.0
-    marker.scale.x = marker.scale.y = marker.scale.z = scale
-    marker.color.a=1.0
-    marker.color.r=1.0
-    marker.type = type
-    marker.action = Marker.ADD
-    if type == Marker.TEXT_VIEW_FACING:
-        marker.text = text
-    return marker  
-
 def imgcallback(msg):
     global camera
     camera = bridge.imgmsg_to_cv2(msg)
 
-def mycallback(msg):
+def player_cb(msg):
     global camera, tfbuf, namepub
 
     if not game_status.status=='DETECT_STARTED':
         return
-
-    poses = MarkerArray()
-    poses_name = MarkerArray()
 
     stamp_pos = PoseStamped()
     stamp_pos.header.stamp = rospy.Time.now()
@@ -109,25 +81,16 @@ def mycallback(msg):
 
         pos = toGround(feet.x, feet.y)
 
-        playername = 'unknown'
-        if player.id>-1:
-            playername = game_status.names[player.id]
-        new_pose = MakeMarker(poses, pos[0], pos[1], frame='temi', type=Marker.SPHERE, scale=0.1)
-        poses.markers.append(new_pose)
-        poses_name.markers.append(MakeMarker(poses_name, pos[0], pos[1]+0.3, frame='temi', type=Marker.TEXT_VIEW_FACING, scale=0.5, text=playername))
-
         # Transform the player poses to map frame for later usage
-        stamp_pos.pose = new_pose.pose
+        stamp_pos.pose.position.x = pos[0]
+        stamp_pos.pose.position.y = pos[1]
         posonmap = tf2_geometry_msgs.do_transform_pose(stamp_pos, transform)
 
         player.position = posonmap.pose
         
-        if player.id >-1 and player.id<PlayerNum:
+        if player.id >-1 and player.id<game_status.player_num:
             print('Player %d with score %f at (%f, %f).'%(player.id, player.score, player.position.position.x, player.position.position.y))
 
-        
-    pospub.publish(poses)
-    namepub.publish(poses_name)
     playerpub.publish(msg)
     
 def gamestatus_cb(msg):
@@ -135,13 +98,11 @@ def gamestatus_cb(msg):
     game_status = msg
     
 def main():
-    global image_pub, pospub, playerpub, transform, tfbuf, namepub
+    global image_pub, playerpub, tfbuf
 
     rospy.init_node('PositionEstimator', anonymous=False)
-    rospy.Subscriber('/players/withid', Players, callback=mycallback, queue_size = 10)
+    rospy.Subscriber('/players/withid', Players, callback=player_cb, queue_size = 10)
     rospy.Subscriber('/game_status', GameStatus, callback=gamestatus_cb, queue_size=10)
-    pospub = rospy.Publisher('/players', MarkerArray, queue_size=10)
-    namepub = rospy.Publisher('/players_name', MarkerArray, queue_size=10)
     playerpub = rospy.Publisher('/players/withpos', Players, queue_size=1)
 
     # tf initialization

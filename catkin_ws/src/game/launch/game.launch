@@ -1,0 +1,12 @@
+<launch>
+  <node name="register" pkg="face" type="register.py"  output="screen"/>
+  <node name="initializeGame" pkg="face" type="initializeGame.py"  output="screen"/>
+  <node name="checkOutStage" pkg="face" type="ckeckface.py"  output="screen"/>
+  <node name="gameFaceRecognition" pkg="face" type="whoisthis.py"  output="screen"/>
+
+  <node name="imagePorter" pkg="camcal" type="imgpub.py"  output="screen"/>
+  <node name="positionEstimator" pkg="camcal" type="positionEstimator.py"  output="screen"/>
+
+  <node name="postureScoring" pkg="skeleton" type="amiright.py"  output="screen"/>
+  <node name="playerDetection" pkg="skeleton" type="PlayerDetection.py"  output="screen"/>
+</launch>

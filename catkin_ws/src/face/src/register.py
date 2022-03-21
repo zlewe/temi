@@ -28,6 +28,10 @@ count = 0
 
 no_face_times=0
 
+def getPlayerListStr():
+    global players_data
+    return players_data['names'].replace('\'','').replace('[','').replace(']','').replace(' ','')
+
 # read the players.json file to know player numbers and names
 def getPlayerList():
     global players_data
@@ -132,9 +136,11 @@ def frame_cb(msg):
 def stopDetect():
     global game_pub, temi_pub
 
+    list = getPlayerListStr()
+
     game_pub.publish('STOP_FACEDETECTION')
     game_pub.publish('STOP_OPENPOSE')
-    temi_pub.publish(TemiCMD('cmd', 'register_done'))
+    temi_pub.publish(TemiCMD('cmd', 'register_done,'+list))
 
     with open(players_path, 'w') as f:
         json.dump(players_data, f)

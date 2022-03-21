@@ -56,7 +56,12 @@ def getImagesAndLabels(path):
 def game_cb(msg):
     global game_status
 
-    if msg.data == 'start game':
+    cmd=msg.data.split(',')
+
+    if len(cmd)<=0:
+        return
+
+    if cmd[0] == 'start game':
 
         print ("Start training faces...")
         faces,ids = getImagesAndLabels(img_path)
@@ -71,21 +76,11 @@ def game_cb(msg):
         game_status = GameStatus()
         game_status.last_status = 'REGISTER'
         game_status.status = 'START_GAME'
-        game_status.player_num = len(players_data['names'])
-        game_status.alive = [1 for name in players_data['names']]
-        game_status.names = players_data['names']
+        game_status.player_num = len(cmd)-1
+        game_status.alive = [1 for i in range(game_status.player_num)]
+        game_status.names = cmd[:-1]
         gamestatus_pub.publish(game_status)
         print('Game Start!')
-
-'''def gamestatus_cb(msg):
-    global game_status, game_pub
-    game_status = msg
-    
-    # Start Detection stage!!!!!!!!!!!!!!
-    if game_status.status=='DETECT_STARTED' and game_status.last_status=='DISPLAY_POSE':
-        rospy.sleep(2)
-        game_pub.publish('START_FACEDETECTION')
-        game_pub.publish('START_OPENPOSE')'''
 
 def main():
     global image_pub, img, target_image, game_pub, temi_pub, gamestatus_pub
