@@ -18,6 +18,14 @@ class Falling():
         self.pub_cmd = rospy.Publisher('temi_cmd', TemiCMD, queue_size=10)
         self.EMA = 50000.0
         self.last = time.time()
+        self.threshold = 100000.0
+
+        rospy.sleep(2)
+
+        cmd = TemiCMD()
+        cmd.type = 'cmd'
+        cmd.arg = 'tiltAngle,-10'
+        self.pub_cmd.publish(cmd)
         
     def isnull(self, bp):
         if bp.pixel.y==0.0:
@@ -42,12 +50,13 @@ class Falling():
                         continue
 
                     fall_value = abs(p0.pixel.y-p8.pixel.y) * abs(p0.pixel.y-p11.pixel.y) * abs(p8.pixel.y-p11.pixel.y)
-                    self.EMA = fall_value*0.5 + self.EMA*0.5
+                    new_ema = fall_value*0.5 + self.EMA*0.5
 
                     #print(f'{abs(p0.pixel.y-p8.pixel.y)} * {abs(p0.pixel.y-p11.pixel.y)} * {abs(p8.pixel.y-p11.pixel.y)}')
                     #print(f'total:{fall_value}')
                     #print(f'ema:{self.EMA}')
-                    if self.EMA<100000.0:
+
+                    if new_ema<self.threshold:
                         print("Bro wake up!!!!!!!!!!!!!!!!!!")
 
                         if (time.time()-self.last)>5:
@@ -56,6 +65,15 @@ class Falling():
                             cmd.type = 'cmd'
                             cmd.arg = 'fall'
                             self.pub_cmd.publish(cmd)
+
+                    if new_ema>=self.threshold and self.EMA<self.threshold:
+                            cmd = TemiCMD()
+                            cmd.type = 'cmd'
+                            cmd.arg = 'return_initial'
+                            self.pub_cmd.publish(cmd)
+
+                    self.EMA = new_ema
+
 
 
         # y0 = p0
